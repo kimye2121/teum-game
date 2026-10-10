@@ -2451,7 +2451,7 @@ body .app-mock.app-mock--flush{background:#F7F8FA;}
 
 /* Onboarding title tracking and agreement dialogue placement. */
 #stageWrap .title,.onboarding-title{letter-spacing:0;}
-#stageAgreementWrap .talk-bubble{top:calc(4% + 38px);}
+#stageAgreementWrap .talk-bubble{top:var(--talk-top, calc(4% + 38px));} /* --talk-top: 캐릭터 머리 높이 (JS fitStageAgreement) */
 
 /* Game GNB: flat brand identity, a shared day, and app-style selected navigation. */
 .cohabit-topbar{height:70px;min-height:70px;padding:0 28px;gap:24px;background:#fff;border-bottom:1px solid #E6EBE5;}

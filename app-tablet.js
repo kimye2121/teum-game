@@ -331,6 +331,13 @@ window.teumBalance = function(root){
     box.style.height = (930 * scale) + 'px';
     document.getElementById('stageAgreementWrap').style.setProperty('--agree-w', (450 * scale) + 'px');
     document.getElementById('stagePhone').style.zoom = scale; // transform:scale은 합의서 글자가 뿌옇게 보여서 zoom (fitAlleyFrame 참고)
+    // 말풍선 높이는 합의서 상자가 아니라 양옆 캐릭터 그림에 맞춘다 - 캐릭터는 화면 가로에 따라 따로 작아지고 내려가서,
+    // 상자 기준이면 좁은 화면에서 말풍선만 머리 위 한참 높이 떴다. 1920x1080에서 보기 좋던 자리(그림 위쪽보다 12px 위)
+    var pv = document.getElementById('myPreview'), wrap = document.getElementById('stageAgreementWrap');
+    if(pv.offsetHeight){
+      var charTop = window.innerHeight - pv.offsetHeight * 85 / 140; // .gender-preview: 높이 140u, bottom -55u
+      wrap.style.setProperty('--talk-top', (charTop - 12 - wrap.getBoundingClientRect().top) + 'px');
+    }
   }
   window.addEventListener('resize', function(){ if(revealPanel.classList.contains('agreeing')) fitStageAgreement(); });
 

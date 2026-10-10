@@ -111,9 +111,9 @@ window.teumBalance = function(root){
   MATE_DESC_BY_AGREEMENT.H[TAKER] = '동네에서 작은 카페를 운영하는 68세예요. 자녀들이 독립한 뒤 집이 적적했는데, 함께 지내며 서로의 생활은 존중하고 따뜻한 안부를 나누고 싶어요.';
   // 매칭 화면·합의서를 거쳐 게임으로 들어가는 유형과 그 메이트 전신 그림 (사용자와 같은 성별) - 세 유형 모두
   var MATE_FULL_IMG = {
-    S:{ female:'object/mate1/mate_women_1_front.png', male:'object/mate1/mate_men_1_front.png' },
-    A:{ female:'object/mate2/mate_women_2_front.png', male:'object/mate2/mate_men_2_front.png' },
-    H:{ female:'object/mate3/mate_women_3_front.png', male:'object/mate3/mate_men_3_front.png' }
+    S:{ female:'object/profile/mate1_woman.png', male:'object/profile/mate1_man.png' },
+    A:{ female:'object/profile/mate2_woman.png', male:'object/profile/mate2_man.png' },
+    H:{ female:'object/profile/mate3_woman.png', male:'object/profile/mate3_man.png' }
   };
   function isMatchType(type){ return !!MATE_FULL_IMG[type]; }
   var currentMateName = '';
@@ -231,7 +231,7 @@ window.teumBalance = function(root){
     // 왼쪽에는 내 캐릭터(성별 선택 화면과 같은 그림)
     document.getElementById('myPreview').classList.toggle('left', isMatch);
     if(isMatch){
-      document.getElementById('myPreviewImg').src = (selectedGender === 'male') ? 'object/charater1_man/cha1_man_front.png' : 'object/character1/cha_front.png';
+      document.getElementById('myPreviewImg').src = (selectedGender === 'male') ? 'object/profile/avata_man.png' : 'object/profile/avata_woman.png';
       document.getElementById('matePreviewImg').src = MATE_FULL_IMG[type][selectedGender === 'male' ? 'male' : 'female'];
     }
     // 아이소메트릭 미니게임은 강은지(S)의 냉장고/세탁물 미션과 서은민(A)의 가사규칙/정산
@@ -271,7 +271,7 @@ window.teumBalance = function(root){
       preview.className = 'gender-preview';
       void preview.offsetWidth; // 성별을 바꿔 누를 때도 등장 애니메이션을 다시 재생
       var isMale = (selectedGender === 'male');
-      document.getElementById('genderPreviewImg').src = isMale ? 'object/charater1_man/cha1_man_front.png' : 'object/character1/cha_front.png';
+      document.getElementById('genderPreviewImg').src = isMale ? 'object/profile/avata_man.png' : 'object/profile/avata_woman.png';
       preview.classList.add(isMale ? 'right' : 'left');
       updateNameGenderNextBtn();
     });
@@ -316,10 +316,10 @@ window.teumBalance = function(root){
   /* ---------- 3단계: 메이트 프로필 소개 -> 동거(게임) 시작 ---------- */
   // 금전형 전신 그림(각 1~2MB, 세로 2926px)을 미리 받아 디코딩해 둔다 - 성별 선택/매칭 화면에서
   // 처음 뜰 때 그림이 늦게 붙거나 애니메이션이 끊기는 것 방지
-  ['object/character1/cha_front.png', 'object/charater1_man/cha1_man_front.png',
-   'object/mate1/mate_women_1_front.png', 'object/mate1/mate_men_1_front.png',
-   'object/mate2/mate_women_2_front.png', 'object/mate2/mate_men_2_front.png',
-   'object/mate3/mate_women_3_front.png', 'object/mate3/mate_men_3_front.png'].forEach(function(src){
+  ['object/profile/avata_woman.png', 'object/profile/avata_man.png',
+   'object/profile/mate1_woman.png', 'object/profile/mate1_man.png',
+   'object/profile/mate2_woman.png', 'object/profile/mate2_man.png',
+   'object/profile/mate3_woman.png', 'object/profile/mate3_man.png'].forEach(function(src){
     var im = new Image(); im.src = src;
     if(im.decode) im.decode().catch(function(){});
   });

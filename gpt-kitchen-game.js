@@ -851,7 +851,7 @@
   var kitchenMateSprite = document.getElementById('kitchenMateSprite');
   // 메이트 자리: 처음엔 부엌, 미션1(반찬 구독) 축하 대화가 끝나면 거실로 옮겨 간다 (mateInLiving)
   var MATE_POS_KITCHEN = { x:36.5, y:64.5 }; // 부엌 바닥 % (냉장고 문 열리는 범위 바로 오른쪽, 조리대 앞 - 뒤가 조리대라 캐릭터가 메이트 뒤로 못 지나감)
-  var MATE_POS_LIVING = { x:62, y:72 };  // 거실 러그 위, 테이블 오른쪽
+  var MATE_POS_LIVING = { x:24, y:59 };  // 거실 소파 바로 앞 - 감정형 메이트 거실 자리(SEO_MATE_POS_EMOTION)와 같은 곳
   var mateInLiving = false;
   function matePos(){ return mateInLiving ? MATE_POS_LIVING : MATE_POS_KITCHEN; }
   function placeMate(){
@@ -966,8 +966,8 @@
   // 말 걸 때 서는 자리는 메이트 자리마다 고정 - 매번 같은 자리에서 서로 옆으로 마주 본다 (도착 위치로 방향을 정하면 앞·뒤로 바뀌었다)
   // 그림 폭이 장면 가로 약 8.5%라 9% 떨어지면 둘이 겹치지 않는다. 같은 높이(dy 0)가 바닥에 없으면 조금 앞으로 (모든 유형 공통)
   var MATE_TALK_OFFSET = {
-    'S:kitchen':[-9, 0], 'S:livingroom':[-9, 0],          // 금전형 - 메이트 왼쪽
-    'A:eunminkitchen':[9, 5], 'A:livingroom':[-9, 0],     // 규칙형 - 부엌은 왼쪽이 식탁이라 오른쪽
+    'S:kitchen':[-9, 0], 'S:livingroom':[-9.2, 4.3],      // 금전형 - 메이트 왼쪽 (거실은 감정형과 같은 자리라 같은 간격)
+    'A:eunminkitchen':[9, 5], 'A:livingroom':[-9.2, 4.3], // 규칙형 - 부엌은 왼쪽이 식탁이라 오른쪽
     'H:livingroom':[-9.2, 4.3]                            // 감정형 - 소파·테이블 사이라 왼쪽 조금 앞
   };
   function mateTalkStand(mx, my){
@@ -2473,7 +2473,7 @@
   // 규칙형도 금전형처럼 고정 NPC - 미션1을 마치고 거실로 걸어 나갈 때(leaving)만 움직인다
   function mateMovable(){ return mate.active && mate.leaving && !mate.hold; }
   var SEO_MATE_POS_KITCHEN = { x:69, y:61 }; // 부엌 - 조리대(오븐) 바로 앞. 예전 y65는 식탁과의 통로를 막아 싱크대↔쓰레기통을 식탁 뒤로 빙 돌아갔다
-  var SEO_MATE_POS_LIVING = { x:62, y:72 };  // 거실 - 금전형 메이트 거실 자리(MATE_POS_LIVING)와 같은 곳
+  var SEO_MATE_POS_LIVING = { x:24, y:59 };  // 거실 - 감정형 메이트 거실 자리(SEO_MATE_POS_EMOTION)와 같은 곳
   var SEO_MATE_POS_EMOTION = { x:24, y:59 }; // 감정형 거실 - 소파 바로 앞(뒤가 소파라 캐릭터가 메이트 뒤로 못 지나감)
   function mateSchedule(fn, ms){ clearTimeout(mate.timer); mate.timer = setTimeout(fn, ms); }
   function mateStopWalking(){

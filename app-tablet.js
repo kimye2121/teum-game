@@ -316,12 +316,14 @@ window.teumBalance = function(root){
   /* ---------- 3단계: 메이트 프로필 소개 -> 동거(게임) 시작 ---------- */
   // 금전형 전신 그림(각 1~2MB, 세로 2926px)을 미리 받아 디코딩해 둔다 - 성별 선택/매칭 화면에서
   // 처음 뜰 때 그림이 늦게 붙거나 애니메이션이 끊기는 것 방지
+  var profilePreloadKeep = [];
   ['object/profile/avata_woman.png', 'object/profile/avata_man.png',
    'object/profile/mate1_woman.png', 'object/profile/mate1_man.png',
    'object/profile/mate2_woman.png', 'object/profile/mate2_man.png',
    'object/profile/mate3_woman.png', 'object/profile/mate3_man.png'].forEach(function(src){
     var im = new Image(); im.src = src;
     if(im.decode) im.decode().catch(function(){});
+    profilePreloadKeep.push(im); // 붙잡아 두지 않으면 해독한 그림이 버려질 수 있다
   });
   var stageAgreementFrame = document.getElementById('stageAgreementFrame');
   function fitStageAgreement(){

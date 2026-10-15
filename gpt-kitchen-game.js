@@ -619,6 +619,8 @@
     Object.keys(set).forEach(function(mood){
       var preloadImg = new Image();
       preloadImg.src = set[mood];
+      if(preloadImg.decode) preloadImg.decode().catch(function(){});
+      spritePreloadKeep.push(preloadImg);
     });
   });
   var visitorGender = 'female'; // 기본값 - 게임 시작 전에는 항상 여성 스프라이트가 기본 표시

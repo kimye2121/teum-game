@@ -361,19 +361,29 @@ window.teumBalance = function(root){
         say('mate', AGREEMENT_SRC === TAKER ? '합의서를 작성해 뒀어요! 틈새살이를 시작하기 전에 꼭 확인해야 해요!' : '그럼 틈새살이를 시작하기 전에 합의서를 작성해봐요!');
       }, 700);
     };
-    if(stageAgreementReady && stageAgreementFrame.getAttribute('src') === stageAgreementUrl()){ show(); return; }
-    prepStageAgreement();
-    stageAgreementFrame.onload = function(){ stageAgreementFrame.onload = null; stageAgreementReady = true; show(); };
+    // 받던 합의서는 버리지 않고(예전엔 다 안 받아졌으면 처음부터 다시 받았다) 글이 다 들어오는 대로 바로 올린다
+    if(stageAgreementWaiting || revealPanel.classList.contains('agreeing')) return; // 두 번 눌러도 한 번만
+    if(stageAgreementFrame.getAttribute('src') !== stageAgreementUrl()) prepStageAgreement();
+    stageAgreementWaiting = true;
+    (function wait(){
+      if(stageAgreementFrame.getAttribute('src') !== stageAgreementUrl()){ stageAgreementWaiting = false; return; } // 기다리다 다른 코드로 돌아갔으면 그만
+      if(!stageAgreementLoaded()){ requestAnimationFrame(wait); return; }
+      stageAgreementWaiting = false;
+      show();
+    })();
   });
   // 합의서를 미리 불러와 화면 바로 아래(밖)에 실제 크기로 그려 둔다(CSS agree-prep) - 폰이 올라오는 첫 프레임에
   // 합의서를 처음 그리는 일이 몰려 0.05~0.08초 멈칫했다. ?wait=1이라 합의서 시연은 폰을 올릴 때(agreement-start) 시작한다
-  var stageAgreementReady = false;
+  var stageAgreementWaiting = false;
+  // 합의서 글(DOM)까지 들어왔으면 준비된 걸로 본다 - 그림·글꼴까지 다 받길(load) 기다리면 게임 그림 미리 받기와 겹쳐 수십 초 걸리기도 했다
+  function stageAgreementLoaded(){
+    var d = stageAgreementFrame.contentDocument;
+    return !!d && d.readyState !== 'loading' && d.location.href.indexOf(stageAgreementUrl()) >= 0;
+  }
   function stageAgreementUrl(){
     return AGREEMENT_SRC + '?name=' + encodeURIComponent(visitorNameInput.value.trim()) + '&mate=' + encodeURIComponent(currentMateName) + '&wait=1';
   }
   function prepStageAgreement(){
-    stageAgreementReady = false;
-    stageAgreementFrame.onload = function(){ stageAgreementFrame.onload = null; stageAgreementReady = true; };
     stageAgreementFrame.src = stageAgreementUrl();
     revealPanel.classList.add('agree-prep');
     fitStageAgreement();

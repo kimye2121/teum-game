@@ -376,14 +376,21 @@ window.teumBalance = function(root){
   // 합의서를 처음 그리는 일이 몰려 0.05~0.08초 멈칫했다. ?wait=1이라 합의서 시연은 폰을 올릴 때(agreement-start) 시작한다
   var stageAgreementWaiting = false;
   // 합의서 글(DOM)까지 들어왔으면 준비된 걸로 본다 - 그림·글꼴까지 다 받길(load) 기다리면 게임 그림 미리 받기와 겹쳐 수십 초 걸리기도 했다
+  // 파일로 직접 열면(file://) 크롬이 합의서 안을 못 보게 막아서, 그때는 예전처럼 다 받아질 때(load)까지 기다린다
+  var stageAgreementDone = '';
   function stageAgreementLoaded(){
-    var d = stageAgreementFrame.contentDocument;
-    return !!d && d.readyState !== 'loading' && d.location.href.indexOf(stageAgreementUrl()) >= 0;
+    if(stageAgreementDone === stageAgreementUrl()) return true;
+    try{
+      var d = stageAgreementFrame.contentDocument;
+      return !!d && d.readyState !== 'loading' && d.location.href.indexOf(stageAgreementUrl()) >= 0;
+    }catch(e){ return false; }
   }
   function stageAgreementUrl(){
     return AGREEMENT_SRC + '?name=' + encodeURIComponent(visitorNameInput.value.trim()) + '&mate=' + encodeURIComponent(currentMateName) + '&wait=1';
   }
   function prepStageAgreement(){
+    stageAgreementDone = '';
+    stageAgreementFrame.onload = function(){ stageAgreementDone = stageAgreementFrame.getAttribute('src'); };
     stageAgreementFrame.src = stageAgreementUrl();
     revealPanel.classList.add('agree-prep');
     fitStageAgreement();

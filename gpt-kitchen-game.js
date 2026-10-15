@@ -1582,6 +1582,14 @@
   // 표정 일러스트(DIALOGUE_PORTRAITS)를 골라 대화창 초상화로 보여준다.
   // opts.emoji를 넘기면 관람객 사진 대신 이모지 초상화로 보여준다(강은지가 직접 말하는
   // 대화 전용 - 메이트 사진 에셋이 없어서 이모지로 대신한다).
+  // 초상화 그림을 바꿀 때 새 그림이 아직 안 받아졌으면, 그 사이 이전 그림(아바타)이 보이지 않게 숨겨 두었다가 다 받아지면 보인다
+  function setDialoguePortrait(src){
+    if(kitchenDialoguePortrait.getAttribute('src') === src) return;
+    kitchenDialoguePortrait.style.visibility = 'hidden';
+    kitchenDialoguePortrait.onload = kitchenDialoguePortrait.onerror = function(){ kitchenDialoguePortrait.style.visibility = ''; };
+    kitchenDialoguePortrait.src = src;
+    if(kitchenDialoguePortrait.complete) kitchenDialoguePortrait.style.visibility = '';
+  }
   function showKitchenDialogue(name, lines, onDone, mood, opts){
     stopWalking(); // 대화 중엔 아바타를 세운다 - 예전엔 금전형만 세워서 규칙·감정형에선 대화창이 떠도 계속 걸어갔다
     disarmHungerBubbleTimer(); // 대화창이 뜨면 머리 위 말풍선은 서서히(0.3초) 사라지고, 이어질 말풍선도 취소
@@ -1600,12 +1608,12 @@
       // 기반 자동 선택 대신 지정된 이미지를 그대로 보여준다.
       kitchenDialogueEmojiPortrait.style.display = 'none';
       kitchenDialoguePortrait.style.display = '';
-      kitchenDialoguePortrait.src = opts.portraitSrc;
+      setDialoguePortrait(opts.portraitSrc);
     } else {
       kitchenDialogueEmojiPortrait.style.display = 'none';
       kitchenDialoguePortrait.style.display = '';
       var portraits = DIALOGUE_PORTRAITS[visitorGender] || DIALOGUE_PORTRAITS.female;
-      kitchenDialoguePortrait.src = (mood === 'happy') ? portraits.happy : portraits.sad;
+      setDialoguePortrait((mood === 'happy') ? portraits.happy : portraits.sad);
     }
     hideDialogueChoices(); // 혹시 이전 대화의 선택지가 남아있다면 새 대화 시작 시 치운다
     kitchenDialogue.classList.add('show');
@@ -2439,10 +2447,12 @@
     MATE3_SPRITES[g] = {};
     Object.keys(MATE_SPRITES[g]).forEach(function(d){ MATE3_SPRITES[g][d] = MATE_SPRITES[g][d].replace(/mate2\/mate_(wo)?men_2_/, 'mate3/mate_$1men_3_'); });
   });
-  [MATE3_SPRITES.female, MATE3_SPRITES.male].forEach(function(set){ Object.keys(set).forEach(function(d){ var im = new Image(); im.src = set[d]; spritePreloadKeep.push(im); }); });
-  Object.keys(MATE_SPRITES).forEach(function(g){
-    Object.keys(MATE_SPRITES[g]).forEach(function(d){ var im = new Image(); im.src = MATE_SPRITES[g][d]; if(im.decode) im.decode().catch(function(){}); spritePreloadKeep.push(im); });
-  });
+  // 메이트 1~3(금전·규칙·감정형) 걷기·표정 그림을 성별 모두 미리 받아 해독해 둔다 - 예전엔 mate1은 아예 안 받아 둬서
+  // 대화창에 아바타가 뜬 채로 있다가 메이트 얼굴이 늦게 바뀌거나 걷는 그림이 늦게 붙었다
+  [1, 2, 3].forEach(function(n){ ['women', 'men'].forEach(function(g){ ['front', 'back', 'left', 'right', 'hi', 'happy', 'worry'].forEach(function(d){
+    var im = new Image(); im.src = 'object/mate' + n + '/mate_' + g + '_' + n + '_' + d + '.png';
+    if(im.decode) im.decode().catch(function(){}); spritePreloadKeep.push(im);
+  }); }); });
   // 대화창에 표시할 메이트 이름 - 상단 바에 이미 성별에 맞게(서은민/서민호) 들어가 있다.
   function mateDisplayName(){
     return (document.getElementById('cohabitMateName').textContent || '').trim() || '서은민';

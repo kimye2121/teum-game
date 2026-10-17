@@ -14,6 +14,9 @@
     font-weight: 700;
     font-display: swap;
   }
+  /* 게임 화면 폰 안(iframe)은 해상도에 따라 축소 반올림으로 412x892보다 1px 작아질 때가 있다 → 페이지가 넘쳐 가로·세로 스크롤바가 생기며
+     화면이 작아 보였다(합의서와 같은 문제). 페이지 자체는 스크롤하지 않는다 (앱 안 스크롤 영역은 그대로) */
+  html, body { overflow: hidden; }
   body {
     margin: 0; padding: 0;   /* 게임 폰 프레임(412x892 iframe)에 딱 맞게 - 여백이 있으면 가로·세로 스크롤이 생겼다 */
     display: flex; justify-content: center; align-items: center;
@@ -1206,8 +1209,8 @@
   const chatPlus = chatComposer.querySelector('.plus');
   chatPlus.removeAttribute('id');
   chatPlus.onclick = () => chatroom.classList.toggle('tray-on');
-  chatComposer.querySelector('.send').onclick = () => {};
-  // 메이트가 먼저 전기값 이야기를 꺼낸 대화 (시간은 지금 기준으로 거슬러 잡는다)
+  const chatInput = chatComposer.querySelector('input'), chatSend = chatComposer.querySelector('.send');
+  // 메이트가 먼저 전기값 이야기를 꺼낸 대화 - 방에 들어가면 메이트 말이 하나씩 오고(chat-in), 내 차례('me')는 내가 [보내기]로 보낸다
   const CHAT = [
     ['in', '있잖아요…'],
     ['in', '혹시 지금 바빠요?'],
@@ -1219,21 +1222,31 @@
     ['in', 'TV나 전등이 켜진 채로 있을 때가 많았나 봐요.'],
     ['in', '어떻게 줄이면 좋을지 같이 정해 보면 좋겠어요!']
   ];
-  const chatTime = i => hhmm(new Date(now - (CHAT.length - i) * 60e3));
-  chats.querySelector('#chatMate time').textContent = chatTime(CHAT.length - 1);
-  const openChatRoom = () => {
-    chatMsgs.textContent = '';
-    CHAT.forEach(([who, t], i) => {
-      const row = chatMsgs.appendChild(document.createElement('div'));
-      row.className = 'cm' + (who === 'me' ? ' me' : '');
-      const b = row.appendChild(document.createElement('div')); b.className = 'b';
-      wrapSeg(b, t);
-      row.appendChild(document.createElement('time')).textContent = chatTime(i);
-    });
-    chatroom.classList.remove('tray-on');
-    chatroom.hidden = false;
+  let chatShown = 0;   // CHAT 중 채팅방에 올라온 줄 수
+  chats.querySelector('#chatMate time').textContent = hhmm(new Date());
+  const chatRow = (who, t) => {
+    const row = chatMsgs.appendChild(document.createElement('div'));
+    row.className = 'cm' + (who === 'me' ? ' me' : '');
+    const b = row.appendChild(document.createElement('div')); b.className = 'b';
+    wrapSeg(b, t);
+    row.appendChild(document.createElement('time')).textContent = hhmm(new Date());
     chatMsgs.scrollTop = chatMsgs.scrollHeight;
   };
+  const openChatRoom = () => {
+    chatMsgs.textContent = '';
+    CHAT.slice(0, chatShown).forEach(([who, t]) => chatRow(who, t));
+    chatroom.classList.remove('tray-on');
+    chatroom.hidden = false;
+  };
+  // 내 차례 줄을 보낸다 - 입력칸에 고쳐 쓴 글이 있으면 그 글로 (textContent로 넣는다)
+  chatSend.onclick = () => {
+    if (!CHAT[chatShown] || CHAT[chatShown][0] !== 'me') return;
+    chatRow('me', chatInput.value.trim() || CHAT[chatShown][1]);
+    chatShown++;
+    chatInput.value = '';
+    document.activeElement.blur();
+  };
+  chatInput.onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) chatSend.click(); };
   document.getElementById('chatMate').onclick = openChatRoom;
   document.getElementById('chatBack').onclick = () => { chatroom.hidden = true; chatroom.classList.remove('tray-on'); };
   // [안건 등록] → 대화가 안건으로 올라가고 채팅방에 알림 줄이 붙는다
@@ -1301,6 +1314,8 @@
     chatPlus:  () => chatroom.hidden ? null : chatPlus,
     chatAgenda: () => chatroom.classList.contains('tray-on') ? chatAgendaBtn : null,
     chatSys:   () => chatMsgs.querySelector('.cm-sys'),
+    chatField: () => chatroom.hidden ? null : chatComposer.querySelector('.field'),
+    chatSend:  () => chatroom.hidden ? null : chatSend,
     pollOpt:   () => agenda.querySelector('.poll li'),
     pollGo:    () => agenda.querySelector('.poll .go'),
     poll:      () => agenda.querySelector('.poll.done'),
@@ -1316,7 +1331,7 @@
     // 미션 시작 전: 홈 화면으로, 지난번에 붙인 메시지·AI 답변은 지운다
     'reset-view': () => {
       shutAgenda(); feed.hidden = true;
-      chats.hidden = chatroom.hidden = true; chatroom.classList.remove('tray-on');
+      chats.hidden = chatroom.hidden = true; chatroom.classList.remove('tray-on'); chatShown = 0; chatInput.value = '';
       thread.querySelectorAll('.ai, .sent, .mate-reply, .attach, .post .kind').forEach(el => el.remove());
       ORIG.texts.forEach(([el, t]) => el.textContent = t);
       // 글쓴이를 '나'로 바꿨으면 메이트로 되돌린다 (이름·얼굴은 바로 뒤 set-mate가 맞춘다)
@@ -1381,6 +1396,12 @@
       thread.scrollTop = thread.scrollHeight;
     }),
     'type-msg': v => TeumGuide.type(msg, v || SENT, 40),
+    // 채팅: 메이트 말이 내 차례 전까지 하나씩 온다 / 내 차례 줄을 입력칸에 적는다
+    'chat-in': () => (function next() {
+      if (!CHAT[chatShown] || CHAT[chatShown][0] === 'me') return Promise.resolve();
+      return TeumGuide.wait(chatShown ? 900 : 500).then(() => { chatRow('in', CHAT[chatShown][1]); chatShown++; return next(); });
+    })(),
+    'chat-type': () => CHAT[chatShown] && CHAT[chatShown][0] === 'me' ? TeumGuide.type(chatInput, CHAT[chatShown][1], 40) : null,
     // AI 답변을 끝까지 적을 때까지 기다린다
     'wait-ai': () => new Promise(resolve => {
       const t = setInterval(() => {

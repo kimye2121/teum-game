@@ -163,8 +163,14 @@
     document.documentElement.classList.toggle('teum-hand', on);
   }, true);
   function isAllowed(t){ return bypass || !locked || (allowEl && allowEl.contains(t)); }
+  // 가이드 중엔 글자를 엔진이 대신 친다(TeumGuide.type) - 입력칸에 포커스가 가면 폰에서 키보드가 올라온다
+  function isTextField(t){
+    return !!t && (t.isContentEditable || t.tagName === 'TEXTAREA' ||
+      (t.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|reset|range|color|file|image)$/.test(t.type)));
+  }
   ['click', 'mousedown', 'dblclick'].forEach(function(type){
     document.addEventListener(type, function(e){
+      if(type === 'mousedown' && locked && isTextField(e.target)) e.preventDefault();   // 눌러도 되는 제목 칸도 포커스는 안 가게 (클릭은 그대로)
       if(isAllowed(e.target)) return;
       // click 단계: 테두리 안이면 버튼 바깥(여백)을 눌러도 그 버튼을 누른 것과 같다 - 버튼만 누르기엔 범위가 좁았다
       if(allowEl && ringEl === allowEl && inRing(e)){
@@ -183,6 +189,8 @@
     }, true);
   });
   document.addEventListener('focusin', function(e){
+    // 추천 칩이 코드로 주는 focus() 같은 것도 가이드 중이면 바로 푼다
+    if(locked && isTextField(e.target)){ e.target.blur(); return; }
     if(isAllowed(e.target)) return;
     if(e.target && e.target.blur) e.target.blur();
   }, true);

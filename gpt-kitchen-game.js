@@ -30,6 +30,13 @@
   // 지금 어느 방을 보고 있는지를 기억해둔다('kitchen' | 'utility'). SCENE_W/H는 방을 바꿀 때
   // switchToUtilityRoom()/switchToKitchenRoom()에서 그때그때 다시 대입한다.
   var currentRoom = 'kitchen';
+  // 한방판: 유형마다 방 하나만 쓴다 - 금전형 다용도실 / 규칙형 부엌 / 감정형 거실. 다른 방에 있던 미션 물건은 그 방으로 옮겼다.
+  // inRoom(방) = 지금 그 방에 있는가. 이 유형이 원래 쓰던 방(TYPE_ROOMS)이면 '한 방'에 모였으므로 참이다
+  var ONE_ROOM = { S:'utility', A:'eunminkitchen', H:'livingroom' };
+  var TYPE_ROOMS = { S:['kitchen', 'utility', 'livingroom'], A:['eunminkitchen', 'livingroom'], H:['livingroom'] };
+  function inRoom(name){
+    return currentRoom === name || (currentRoom === ONE_ROOM[activeMateType] && (TYPE_ROOMS[activeMateType] || []).indexOf(name) >= 0);
+  }
 
   // 배경을 kitchen_bg2.png(2528x1686) → kitchen_bg22.png(2046x1686)로 교체하면서
   // 좌우 여백만 잘라낸 크롭본으로 바뀌었다(세로 크기는 동일, 그림 자체 확대/축소는 없음).
@@ -53,8 +60,10 @@
     // 박스(room-stage) 크기는 항상 고정(부엌 비율)이고, 배경 이미지는
     // object-fit:cover로 박스를 가로/세로 꽉 채우면서 비율은 유지한 채 위아래(또는 좌우)를
     // 잘라내는 방식이므로, kitchenScene은 그냥 항상 박스 크기와 정확히 같게 맞춘다.
-    var gv = kitchenGameView.getBoundingClientRect();
-    var w = gv.width, h = gv.height;
+    // getBoundingClientRect는 transform까지 반영된 크기라, 폰 여닫을 때 집 크기 변환(app-tablet.js setDrawerOpen) 도중엔
+    // 예전 크기를 돌려줘서 그림이 애니메이션 내내 예전 크기로 있다가 끝날 때 덜컥 바뀌었다 → transform과 상관없는 배치 크기를 쓴다
+    var cs = getComputedStyle(kitchenGameView);
+    var w = parseFloat(cs.width) || 0, h = parseFloat(cs.height) || 0; // 숨겨져 있으면 'auto' → 0 (예전과 같게)
     kitchenScene.style.width = w + 'px';
     kitchenScene.style.height = h + 'px';
     kitchenScene.style.setProperty('--scale', (w / SCENE_W).toFixed(4));
@@ -90,7 +99,6 @@
   var kitchenDialogueBox = document.getElementById('kitchenDialogueBox');
   var kitchenDialogueChoices = document.getElementById('kitchenDialogueChoices');
   var kitchenDialogueNextArrow = document.getElementById('kitchenDialogueNextArrow');
-  var kitchenEunjiIcon = document.getElementById('kitchenEunjiIcon');
   // 강은지 엔딩의 갈림길 대화에서 선택지가 떠 있는 동안 true - 화면 클릭/Enter로
   // 건너뛰지 못하게 막는 용도(dismissKitchenDialogue/keydown 핸들러에서 참고).
   var kitchenDialogueChoiceMode = false;
@@ -226,6 +234,7 @@
     endingSubmitted = true;
     endingFeedbackForm.style.display = 'none';
     endingThanks.style.display = 'block';
+    endingThanks.closest('.ending-card').classList.add('thanks'); // 시작 화면 도형 배경
     endingNextBtn.style.display = 'none';
     endingRestartBtn.style.display = 'block';
     // 다른 유형 이어서 하기: 이름·성별·합의 상태는 그대로, 헤더 유형 탭을 누른 것과 같다 (switchMateType). 지금 유형은 뺀다.
@@ -330,7 +339,13 @@
     restoreProgress(p);
   });
   // 끝낸 미션을 그 결과 그대로 되살린다 (축하 대화·폭죽 없이)
+  // 되살릴 땐 끝낸 상태로 바로 보이게 - 빨래 바구니가 떨어지는 등 완료 연출(transition)을 잠깐 끈다
+  function skipRestoreAnim(){
+    kitchenScene.classList.add('kitchen-restoring');
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ kitchenScene.classList.remove('kitchen-restoring'); }); });
+  }
   function restoreProgress(p){
+    skipRestoreAnim();
     if(activeMateType === 'S'){
       if(p.fridge){
         fridgeChecked = false; fridgeResolved = true;
@@ -348,7 +363,7 @@
       if(p.m1){
         eunminMission1Done = true;
         kitchenSinkIcon.style.display = 'none'; kitchenBinsIcon.style.display = 'none';
-        if(currentRoom === 'eunminkitchen') kitchenBgImg.src = EUNMIN_KITCHEN_CLEAN_SRC;
+        if(currentRoom === 'eunminkitchen') kitchenBgImg.src = roomSrc('eunminKitchen');
         renderEunminMess();
         if(p.mateLiving !== false) mateLeaveRoom(); // 메이트는 거실에 (정산을 먼저 끝냈으면 부엌에 남아 이야기하기를 기다리던 그대로)
       }
@@ -357,7 +372,7 @@
       if(p.tv) setEmotionChatDone(true); // 미션1(채팅으로 안건 등록)
       if(p.ag){ emotionEndingDone = true; setEmotionTvDone(true); } // 미션2(안건 확인 - TV·전등 끔)
       if(p.fb) emotionFbDone = true;
-      setEmotionFbReady(true); // 미션3(피드백) 핀도 처음부터 띄워 둔다 - 안건(미션2) 전에 누르면 한마디만 (이미 끝냈으면 setEmotionFbReady가 숨긴다)
+      setEmotionFbReady(true); // 미션3(피드백) 핀도 처음부터 띄워 둔다 - 채팅~안건 확인 사이에 누르면 한마디만 (이미 끝냈으면 setEmotionFbReady가 숨긴다)
     }
     // 있던 방·자리로 (방 바꾸는 함수가 시작 자리를 정하므로 그다음에 자리를 덮어쓴다)
     var toRoom = { kitchen:switchToKitchenRoom, utility:switchToUtilityRoom, livingroom:switchToLivingroomRoom,
@@ -369,29 +384,8 @@
     kitchenScene.classList.add('game-started'); // 핀·미션 카드
     agendaBegin(); // 두 미션을 마친 채 돌아왔으면 새 안건 알림부터 다시
   }
-  // [개발용 - 완성 후 이 블록 통째로 삭제] 게임 화면에서 Ctrl+Shift+S: 지금 유형의 미션 1·2를 끝낸 상태로 거실에 두고
-  // 세 번째 '새 안건 확인하기'(메이트 알림)부터 하게 한다. 유형을 오갈 때 진행도를 되살리는 restoreProgress를 그대로 쓴다.
-  // (코드 입력 화면의 같은 단축키는 app-tablet.js - 게임 화면이 떠 있으면 그쪽은 아무것도 안 한다)
-  // 게임에 들어오자마자 시작 안내·환영 인사 도중에 눌러도 된다 - 둘 다 본 걸로 치고 닫는다
-  document.addEventListener('keydown', function(e){
-    if(!(e.ctrlKey && e.shiftKey && e.code === 'KeyS') || !document.getElementById('cohabitView').classList.contains('show') ||
-       !document.getElementById('cohabit-game-container').classList.contains('kitchen-active')) return;
-    e.preventDefault();
-    if(clearedTypes[activeMateType] || document.body.classList.contains('app-drawer-open')) return; // 앱 미션 도중·엔딩 뒤엔 안 함
-    if(kitchenDialogue.classList.contains('show')){
-      if(kitchenDialogueOnDone || kitchenDialogueChoiceMode) return; // 뒤에 이어질 일이 있는 미션 대화는 끊지 않는다 (환영 인사는 이어지는 게 없음)
-      closeKitchenDialogue();
-    }
-    startCoachSeen = true; welcomeSeen[activeMateType] = true;
-    if(coachAbort) coachAbort();
-    var p = { S:{ fridge:true, laundry:true }, A:{ m1:true, m2:true, mateLiving:true }, H:{ tv:true, ag:true } }[activeMateType];
-    if(!p) return;
-    p.room = 'livingroom';
-    // 아직 게임 시작 전(환영 인사가 뜨기 전 0.8초)이면 진행도로 넣어 두고 곧 올 kitchen:game-start가 되살린다
-    if(!kitchenScene.classList.contains('game-started')){ progressByType[activeMateType] = p; return; }
-    restoreProgress(p);
-  });
   function restoreClearedEnding(){
+    skipRestoreAnim();
     // 미션을 모두 마친 상태(완료율 100%)로 두고, 끝낼 때 나오는 그라데이션 축하 화면('함께 맞춰 간 첫날')만 보여 준다
     // (리뷰·감사 팝업은 처음 끝냈을 때 한 번만 - 헤더 유형 탭·다시하기·다른 코드 입력은 그대로 누를 수 있다)
     if(activeMateType === 'S'){
@@ -400,7 +394,7 @@
     } else if(activeMateType === 'A'){
       eunminMission1Done = eunminMission2Done = true;
       eunminEndingDone = true; // 세 번째 미션(새 안건 확인하기)까지 완료 - 안 하면 카드가 67%로 보였다
-      if(currentRoom === 'eunminkitchen') kitchenBgImg.src = EUNMIN_KITCHEN_CLEAN_SRC;
+      if(currentRoom === 'eunminkitchen') kitchenBgImg.src = roomSrc('eunminKitchen');
       renderEunminMess();
     } else if(activeMateType === 'H'){
       setEmotionTvDone(true); setEmotionChatDone(true); emotionFbDone = true; emotionEndingDone = true; setEmotionFbReady(false);
@@ -432,6 +426,7 @@
     endingFeedbackText.value = '';
     endingFeedbackForm.style.display = '';
     endingThanks.style.display = 'none';
+    endingThanks.closest('.ending-card').classList.remove('thanks');
     endingNextBtn.style.display = '';
     endingRestartBtn.style.display = 'none';
     document.getElementById('endingOtherTypes').style.display='none';
@@ -449,10 +444,13 @@
   function renderFridge(){ renderFridgeEmpty(); }
   // 문 열린(텅 빈) 냉장고 이미지는 닫힌 냉장고와 원본 이미지 비율이 달라서
   // 별도의 위치·크기 값(state.fridgeEmpty)을 가진다. 🧊(열림) 튜너로 직접 조절 가능.
+  // 한방판: 다용도실에선 다용도실 좌표(state.utility.fridge·fridgeIcon·fridgePoint)를 쓴다
+  function fridgeAt(){ return currentRoom === 'utility' ? state.utility.fridge : state.fridgeEmpty; }
   function renderFridgeEmpty(){
-    kitchenFridgeImg.style.top = state.fridgeEmpty.top + '%';
-    kitchenFridgeImg.style.left = state.fridgeEmpty.left + '%';
-    kitchenFridgeImg.style.width = state.fridgeEmpty.width + '%';
+    var fa = fridgeAt();
+    kitchenFridgeImg.style.top = fa.top + '%';
+    kitchenFridgeImg.style.left = fa.left + '%';
+    kitchenFridgeImg.style.width = fa.width + '%';
     kitchenFridgeImg.style.height = 'auto';
   }
   // 지금 화면에 보여야 할 냉장고 상태(닫힘/열림-텅빔/열림-가득참)에 맞는 위치를 적용한다.
@@ -462,9 +460,10 @@
     if(fridgeChecked || fridgeResolved) renderFridgeEmpty(); else renderFridge();
   }
   function renderFridgeIcon(){
-    kitchenFridgeIcon.style.top = state.kitchenFridgeIcon.top + '%';
-    kitchenFridgeIcon.style.left = state.kitchenFridgeIcon.left + '%';
-    kitchenFridgeIcon.style.setProperty('--icon-scale', state.kitchenFridgeIcon.size / 100);
+    var fi = currentRoom === 'utility' ? state.utility.fridgeIcon : state.kitchenFridgeIcon;
+    kitchenFridgeIcon.style.top = fi.top + '%';
+    kitchenFridgeIcon.style.left = fi.left + '%';
+    kitchenFridgeIcon.style.setProperty('--icon-scale', fi.size / 100);
   }
   // 다용도실 전용 오브젝트(빨래더미). CSS에서 다용도실 화면일 때만 보이게 처리되므로,
   function renderLaundry(){
@@ -536,12 +535,22 @@
     kitchenBubbleIcon.style.setProperty('--icon-scale', state.eunminKitchen.bubbleIcon.size / 100);
   }
   // 서은민(A) 미션2 전용: 거실 식탁 위 정산 종이 상태이상 아이콘
+  // 한방판: 규칙형 고지서·핀·서는 자리는 부엌 식탁 위(state.eunminKitchen), 감정형 피드백 핀은 거실 책상 위(state.livingroom)
+  function paperPos(){ return currentRoom === 'eunminkitchen' ? state.eunminKitchen.paperIcon : state.livingroom.paperIcon; }
+  function paperStand(){ return currentRoom === 'eunminkitchen' ? state.eunminKitchen.paperPoint : LIVING_DESK_SIDE; }
+  function renderANotice(){
+    var n = state.eunminKitchen.notice;
+    if(currentRoom !== 'eunminkitchen'){ kitchenANotice.style.left = kitchenANotice.style.top = kitchenANotice.style.width = ''; return; }
+    kitchenANotice.style.left = n.left + '%'; kitchenANotice.style.top = n.top + '%'; kitchenANotice.style.width = n.width + '%';
+  }
   function renderPaperIcon(){
     if(!kitchenPaperIcon) return;
+    renderANotice();
     // 핀 끝이 고지서 그림(.kitchen-a-notice) 윗변에 닿게 위로 (핀 높이 112.5/1686의 절반쯤) - 감정형 피드백 핀은 같은 paperIcon 값을 그대로 쓰므로 여기서만 뺀다
-    kitchenPaperIcon.style.top = (state.livingroom.paperIcon.top - 3.1) + '%';
-    kitchenPaperIcon.style.left = state.livingroom.paperIcon.left + '%';
-    kitchenPaperIcon.style.setProperty('--icon-scale', state.livingroom.paperIcon.size / 100);
+    var pp = paperPos();
+    kitchenPaperIcon.style.top = (pp.top - 3.1) + '%';
+    kitchenPaperIcon.style.left = pp.left + '%';
+    kitchenPaperIcon.style.setProperty('--icon-scale', pp.size / 100);
   }
   // 지금 어느 방을 보고 있는지에 맞는 충돌 다각형 저장소를 돌려준다.
   // (부엌/다용도실/서은민 부엌/거실 콜라이더는 전부 완전히 분리된 별도 객체 -
@@ -737,6 +746,8 @@
     if(clearedTypes[activeMateType]){ restoreClearedEnding(); return; } // 이미 엔딩까지 마친 유형이면 엔딩 장면으로
     var start = function(){ window.dispatchEvent(new CustomEvent('kitchen:game-start')); };
     if(!document.getElementById('cohabit-game-container').classList.contains('kitchen-active')){ start(); return; }
+    // 하던 유형으로 돌아왔으면 기다리지 않고 바로 되살린다 - 0.8초 뒤에 하면 화면이 미션 전 모습으로 나타났다가 바뀌었다(깜빡임)
+    if(progressByType[activeMateType]){ start(); return; }
     setTimeout(function(){ // 게임 화면이 서서히 나타난 뒤에
       // 첫 인사는 집에 들어온 방식에 따라: taker = 내가 임차인(메이트 집에 들어옴), giver = 내가 임대인(메이트를 들임), newhome = 같이 새집을 구함
       var GREETING = {
@@ -745,7 +756,7 @@
         newhome: '우리가 함께 구한 새집에 온 걸 환영해요! 여기서 잘 지내봐요.'
       };
       var mateNm = (e.detail && e.detail.name) || '메이트', portrait = { portraitSrc: welcomePortraitSrc() };
-      // ① 게임 시작과 함께 시작 안내(오늘의 미션·힌트·이동·핀·방 이동·메이트 → '즐거운 틈새살이를 시작해봐요!')
+      // ① 게임 시작과 함께 시작 안내(오늘의 미션·힌트·이동·핀·메이트 → '즐거운 틈새살이를 시작해봐요!')
       // → ② 메이트가 합의서 유형(집에 들어온 방식)에 맞춰 환영해 준다
       start();
       showStartCoach(function(){
@@ -760,7 +771,7 @@
     }, 800);
   });
 
-  /* ---- 게임 시작 안내: 게임이 시작되면 바로, 오늘의 미션·힌트·이동·핀·방 이동·메이트를 차례로 짚어 준다 ----
+  /* ---- 게임 시작 안내: 게임이 시작되면 바로, 오늘의 미션·힌트·이동·핀·메이트를 차례로 짚어 준다 ----
      메이트가 할 일을 정해 주는 대신 이 안내와 힌트가 다음 할 일을 알려 준다. 안내 중엔 장면 클릭을 막는다 */
   var coachEl = null, coachAbort = null;
   // 한 관람객에게 한 번만 - 끝까지 본 뒤엔 다시하기·다른 유형에서도 건너뛰고 바로 환영 인사. '다른 코드 입력'(새 관람객)이면 다시 보여 준다
@@ -775,13 +786,11 @@
     var firstPin = function(){ return Array.prototype.slice.call(kitchenScene.querySelectorAll('img[src*="alert_pin"]')).filter(visible)[0]; };
     var mateSprite = function(){ return [document.getElementById('kitchenMateSprite'), document.getElementById('kitchenSeoMateSprite')].filter(visible)[0]; };
     var playerSprite = function(){ return document.getElementById('kitchenPlayerSprite'); };
-    var roomBtn = function(){ return Array.prototype.slice.call(document.querySelectorAll('button[class*="-goto-btn"], button[class*="-back-btn"]')).filter(visible)[0]; }; // 감정형(방 하나)은 없음
     var steps = [
-      { el:function(){ return document.getElementById('missionCard'); }, chip:'오늘의 미션', text:'오늘 메이트와 함께\n해결할 일이에요.\n미션을 마치면 체크되고\n완료율이 올라가요.' },
+      { el:function(){ return document.getElementById('missionCard'); }, chip:'오늘의 미션', text:'오늘 해결할\n일이에요.\n미션을 마치면 체크되고\n완료율이 올라가요.' },
       { el:function(){ return document.getElementById('missionHint'); }, chip:'힌트', text:'무엇부터 할지 모르겠다면\n힌트를 보세요.\n지금 해 볼 일을 알려줘요.' },
       { el:playerSprite, chip:'이동', text:'바닥을 누르면\n그 자리로 걸어가요.\n가고 싶은 곳을 눌러\n집 안을 돌아다녀 보세요.' },
       { el:firstPin, chip:'미션 시작', text:'빨간 <b>!</b> 핀을 누르면\n그 자리로 걸어가\n미션이 시작돼요.' },
-      { el:roomBtn, chip:'방 이동', text:'이 버튼을 누르면\n<b>다른 방</b>으로 갈 수 있어요.\n미션이 다른 방에 있을 땐\n여기로 이동해요.' },
       { el:mateSprite, chip:'메이트', text:'메이트를 누르면 언제든\n이야기를 나눌 수 있어요.' },
       { center:true, chip:'시작', text:'그럼 즐거운 틈새살이를\n시작해봐요!' } // 대상 없이 화면 가운데
     ];
@@ -855,7 +864,8 @@
   var MATE_POS_KITCHEN = { x:36.5, y:64.5 }; // 부엌 바닥 % (냉장고 문 열리는 범위 바로 오른쪽, 조리대 앞 - 뒤가 조리대라 캐릭터가 메이트 뒤로 못 지나감)
   var MATE_POS_LIVING = { x:24, y:59 };  // 거실 소파 바로 앞 - 감정형 메이트 거실 자리(SEO_MATE_POS_EMOTION)와 같은 곳
   var mateInLiving = false;
-  function matePos(){ return mateInLiving ? MATE_POS_LIVING : MATE_POS_KITCHEN; }
+  var MATE_POS_UTILITY = { x:40.5, y:64.5 }; // 한방판 금전형 방(부엌 그림 kitchen_bg22) - 조리대 앞 (원래 부엌 자리 36.5에서 사용자 요청으로 오른쪽으로)
+  function matePos(){ return currentRoom === 'utility' ? MATE_POS_UTILITY : mateInLiving ? MATE_POS_LIVING : MATE_POS_KITCHEN; }
   function placeMate(){
     var g = visitorGender === 'male' ? 'men' : 'women'; // 메이트는 사용자와 같은 성별 (강은지 / 강지혁)
     var p = matePos();
@@ -865,14 +875,11 @@
     kitchenMate.style.zIndex = furnitureDepthZ(p.x, p.y); // 캐릭터와 같은 바닥선 규칙
     kitchenMateBubble.style.left = p.x + '%';
     kitchenMateBubble.style.top = p.y + '%';
-    // 거실 엔딩 '말 걸기' 핀은 메이트 머리 위에 (캐릭터 높이 ≈ 화면 높이 33%)
-    kitchenEunjiIcon.style.left = MATE_POS_LIVING.x + '%';
-    kitchenEunjiIcon.style.top = (MATE_POS_LIVING.y - 37) + '%';
   }
   // 금전형에서 메이트가 지금 있는 방(부엌 또는 거실)일 때만 보이게
   // ponytail: 매 프레임(rAF) 돌던 걸 0.1초마다로 - 메이트는 걸어 나갈 때(mateLeaveAnim이 따로 그림)만 움직여서 이 정도면 충분하고, CPU를 덜 쓴다
   (function syncMateVisible(){
-    var here = activeMateType === 'S' && currentRoom === (mateInLiving ? 'livingroom' : 'kitchen');
+    var here = activeMateType === 'S' && inRoom(mateInLiving ? 'livingroom' : 'kitchen');
     kitchenMate.style.display = here ? '' : 'none';
     // 앞뒤 가림도 매번 다시 - 냉장고 문이 열리면 그림 모양이 바뀌어 옆에 선 메이트를 가린다
     // 식탁 뒤(9)면 8로 - 나(식탁 뒤 9)보다 항상 아래. 식탁 앞(11)이면 11, 나는 12
@@ -889,72 +896,7 @@
   placeMate();
   window.addEventListener('kitchen:set-gender', placeMate);
 
-  // 미션1 축하 대화가 끝나면: 메이트가 한마디 하고 오른쪽 앞(방 밖)으로 걸어 나가며 사라져 거실로 간다
-  var MATE_EXIT_POS = { x:80, y:97 }; // 부엌 바닥 오른쪽 앞(열린 면, 다용도실 버튼 쪽)으로 나간다 - 바닥 밖이면 길찾기가 가장 가까운 바닥까지
-  var mateLeaveAnim = null, mateLeaveTimer = null;
-  // 냉장고 미션(미션1)을 마치면 빨래 여부와 상관없이 메이트가 거실로 간다. 부엌에서 끝냈으면
-  // 한마디 하고 걸어 나가고, 다른 방에서 끝냈으면(메이트가 안 보이는 곳) 그냥 거실로 옮겨 둔다
-  window.addEventListener('kitchen:mission1-dialogue-done', mateToLivingIfDone);
-  function mateToLivingIfDone(){
-    if(activeMateType !== 'S' || mateInLiving || !fridgeResolved) return;
-    if(currentRoom !== 'kitchen'){ mateInLiving = true; placeMate(); return; }
-    showPlayerBubble('저는 거실 정리 좀 하고 있을게요!', 1800, kitchenMateBubble);
-    mateLeaveTimer = setTimeout(function(){
-      mateLeaveTimer = null;
-      if(currentRoom !== 'kitchen'){mateInLiving=true;placeMate();return;}
-      // 나와 같은 길찾기로 걸을 수 있는 바닥만 따라 걸어 나간다(직선으로 가면 식탁 그림을 뚫고 지나갔다).
-      // 걷는 방향 그림·가구 앞뒤 가림도 나와 같은 규칙, 길의 마지막 40% 동안 서서히 사라진다
-      var gnd = visitorGender === 'male' ? 'men' : 'women', cancelled = false, raf = null;
-      mateLeaveAnim = { cancel:function(){ cancelled = true; cancelAnimationFrame(raf); kitchenMate.style.opacity = ''; } }; // 길 계산 전에 세워야 메이트 자신이 막힘에서 빠진다
-      var pos = { x:MATE_POS_KITCHEN.x, y:MATE_POS_KITCHEN.y };
-      var path = findWalkPath(pos.x, pos.y, MATE_EXIT_POS.x, MATE_EXIT_POS.y);
-      // Fade at the last reachable floor point; never extend across unwalkable pixels.
-      var total = 0, prev = pos;
-      path.forEach(function(p){ total += Math.hypot((p.x - prev.x) * SCENE_ASPECT, p.y - prev.y); prev = p; });
-      var walked = 0, last = null, axis = null, facing = null, SPEED = playerSpeed * 0.8;
-      kitchenMate.classList.add('kitchen-is-walking'); // 플레이어와 같은 걷기 흔들림
-      (function stepMate(ts){
-        if(cancelled) return;
-        if(kitchenDialogue.classList.contains('show') || document.body.classList.contains('app-drawer-open')){last=ts;raf=requestAnimationFrame(stepMate);return;}
-        var dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000);
-        last = ts;
-        var budget = SPEED * dt;
-        while(budget > 0 && path.length){
-          var wp = path[0], dx = wp.x - pos.x, dy = wp.y - pos.y, d = Math.hypot(dx * SCENE_ASPECT, dy);
-          if(d > 0.001){ // 방향 그림: 대각선 근처면 지금 축 유지 (나와 같은 규칙)
-            var ax = Math.abs(dx) * SCENE_ASPECT, ay = Math.abs(dy);
-            if(axis !== 'h' && ax > ay * 1.3) axis = 'h'; else if(axis !== 'v' && ay > ax * 1.3) axis = 'v'; else if(!axis) axis = ax >= ay ? 'h' : 'v';
-            var dir = axis === 'h' ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'front' : 'back');
-            if(dir !== facing){ facing = dir; kitchenMateSprite.src = 'object/mate1/mate_' + gnd + '_1_' + dir + '.png'; }
-          }
-          if(d <= budget){ pos.x = wp.x; pos.y = wp.y; path.shift(); budget -= d; walked += d; }
-          else { pos.x += dx / d * budget; pos.y += dy / d * budget; walked += budget; budget = 0; }
-        }
-        kitchenMate.style.left = pos.x + '%';
-        kitchenMate.style.top = pos.y + '%';
-        var mz = furnitureDepthZ(pos.x, pos.y);
-        kitchenMate.style.zIndex = mz === 9 ? 8 : mz;
-        kitchenMate.style.opacity = Math.max(0, Math.min(1, (total - walked) / (SPEED * 0.6))); // 남은 길이 0.6초 거리 이내면 사라지기 시작
-        if(path.length){ raf = requestAnimationFrame(stepMate); return; }
-        // 먼저 숨기고 나서 거실 자리로 옮긴다 - 반대로 하면 한 프레임 동안 거실 좌표에 불투명하게 보여 지직거렸다
-        kitchenMate.style.display = 'none';
-        mateLeaveAnim = null;
-        mateInLiving = true; placeMate();
-        kitchenMate.classList.remove('kitchen-is-walking');
-        kitchenMate.style.opacity = '';
-      })(performance.now());
-    }, 1900);
-  }
-  // 메이트가 거실로 가려고 한마디 하거나 걸어 나가는 중에 내가 먼저 방을 옮기면, 새 방이 보이기 전에 메이트를
-  // 바로 거실에 가 있게 한다 - 안 그러면 내가 거실에 도착한 뒤에야 메이트가 나타나 순간이동한 것처럼 보였다
-  window.addEventListener('kitchen:room-switching', function(){
-    if(activeMateType !== 'S' || mateInLiving || !(mateLeaveTimer || mateLeaveAnim)) return;
-    clearTimeout(mateLeaveTimer); mateLeaveTimer = null;
-    if(mateLeaveAnim){ mateLeaveAnim.cancel(); mateLeaveAnim = null; }
-    kitchenMate.classList.remove('kitchen-is-walking');
-    kitchenMateBubble.classList.remove('show'); // '거실에서 쉬고 있을게요' 말풍선이 새 방까지 따라오지 않게
-    mateInLiving = true; placeMate();
-  });
+  var mateLeaveAnim = null, mateLeaveTimer = null; // ponytail: 한방판에선 메이트가 방을 나가지 않아 늘 null (예전 걸어 나가기 흔적 - 검사하는 곳들이 남아 있음)
   window.addEventListener('kitchen:mission-reset', function(){
     clearTimeout(mateLeaveTimer);
     if(mateLeaveAnim){ mateLeaveAnim.cancel(); mateLeaveAnim = null; }
@@ -968,7 +910,7 @@
   // 말 걸 때 서는 자리는 메이트 자리마다 고정 - 매번 같은 자리에서 서로 옆으로 마주 본다 (도착 위치로 방향을 정하면 앞·뒤로 바뀌었다)
   // 그림 폭이 장면 가로 약 8.5%라 9% 떨어지면 둘이 겹치지 않는다. 같은 높이(dy 0)가 바닥에 없으면 조금 앞으로 (모든 유형 공통)
   var MATE_TALK_OFFSET = {
-    'S:kitchen':[-9, 0], 'S:livingroom':[-9.2, 4.3],      // 금전형 - 메이트 왼쪽 (거실은 감정형과 같은 자리라 같은 간격)
+    'S:kitchen':[-9, 0], 'S:livingroom':[-9.2, 4.3], 'S:utility':[-9, 0],      // 금전형 - 메이트 왼쪽 (거실은 감정형과 같은 자리라 같은 간격)
     'A:eunminkitchen':[9, 5], 'A:livingroom':[-9.2, 4.3], // 규칙형 - 부엌은 왼쪽이 식탁이라 오른쪽
     'H:livingroom':[-9.2, 4.3]                            // 감정형 - 소파·테이블 사이라 왼쪽 조금 앞
   };
@@ -986,16 +928,16 @@
     // 순서 상관없이: 진행 중인 미션 → 하나만 끝난 상태 → 아무것도 안 함 → 둘 다 끝(맨 아래)
     if(fridgeChecked && !fridgeResolved) return {
       me: '냉장고가 텅 비어 있더라고요…',
-      mate: [['worry', '맞아요, 저도 요즘 장 볼 틈이 없었어요. 미안해요.'], ['happy', '반찬가게 정기 구독을 둘이 같이 하면 더 싸다더라고요.\n같이 신청하면 비용은 반씩 나눠요!']] };
+      mate: [['worry', '맞아요, 저도 요즘 장 볼 틈이 없었어요. 미안해요.'], ['happy', '반찬가게 정기 구독은 둘이 나눠 내면 더 싸다더라고요.\n신청해 주시면 비용은 반씩 낼게요!']] };
     if(laundryChecked && !laundryResolved) return {
-      me: '다용도실에 빨래가 잔뜩 쌓여 있더라고요…',
-      mate: [['worry', '저도 신경 쓰였어요. 둘이 하기엔 양이 많더라고요.'], ['happy', '세탁소 단체권으로 같이 맡기면 훨씬 편할 것 같아요.\n비용은 제가 반 낼게요!']] };
+      me: '빨래가 잔뜩 쌓여 있더라고요…',
+      mate: [['worry', '저도 신경 쓰였어요. 둘이 하기엔 양이 많더라고요.'], ['happy', '세탁소 단체권으로 맡기면 훨씬 편할 것 같아요.\n신청해 주시면 비용은 제가 반 낼게요!']] };
     if(laundryResolved && !fridgeResolved) return {
       me: '세탁 구독 신청했어요!',
-      mate: [['happy', '고마워요! 제 몫은 바로 보낼게요.'], ['worry', '빨래는 해결됐는데, 냉장고가 비어서\n오늘 저녁을 어쩌나 고민이에요.']] };
+      mate: [['happy', '고마워요! 제 몫은 바로 보낼게요.'], ['happy', '저는 신발장 정리하던 참이었어요.']] };
     if(fridgeResolved && !laundryResolved) return {
       me: '반찬 구독 신청했어요!',
-      mate: [['happy', '고마워요! 제 몫은 바로 보낼게요.'], ['worry', '밥 걱정은 덜었네요.\n이제 다용도실 빨래만 해결되면 한결 가벼울 것 같아요.']] };
+      mate: [['happy', '고마워요! 제 몫은 바로 보낼게요.'], ['happy', '저는 창문 좀 닦고 있었어요.']] };
     if(!fridgeResolved && !laundryResolved) return {
       me: mateCallName() + ', 뭐 하고 계세요?',
       mate: ['저녁 뭐 먹을까 고민하고 있었어요.', '냉장고에 먹을 게 있으려나…'], mood:'worry' };
@@ -1032,7 +974,7 @@
       { me:c + ', 차 한잔 하실래요?', mate:['좋지요. 따뜻한 차 마시면서 이야기하면 마음이 풀리더라고요.'] },
       { me:'오늘 하루 어떠셨어요?', mate:['저는 괜찮았어요. 그쪽은 어땠어요?', '힘든 일 있으면 언제든 얘기해요.'] },
       { me:'창밖 날씨가 좋네요.', mate:['그러게요. 산책이라도 다녀올까요?'] },
-      { me:c + ', 뭐 하고 계세요?', mate:['그냥 앉아서 쉬고 있었어요.', '같이 사니까 집이 한결 따뜻하게 느껴지네요.'] }
+      { me:c + ', 뭐 하고 계세요?', mate:['그냥 잠깐 쉬고 있었어요.', '같이 사니까 집이 한결 따뜻하게 느껴지네요.'] }
     ];
   }
   kitchenMateSprite.style.pointerEvents = 'auto';
@@ -1140,7 +1082,7 @@
   }
   // 감정형 TV·피드백 핀(.kitchen-tv-icon)도 - 빠져 있어서 감정형에선 핀이 아바타를 가렸다
   // 메이트 머리 위 '…' 말풍선 버튼(.kitchen-bubble-icon)도 핀과 같은 규칙 - 규칙형에서만 아바타 위로 덮였다
-  var MISSION_PINS = Array.prototype.slice.call(document.querySelectorAll('.kitchen-fridge-icon, .kitchen-laundry-icon, .kitchen-sink-icon, .kitchen-bins-icon, .kitchen-paper-icon, .kitchen-eunji-icon, .kitchen-tv-icon, .kitchen-bubble-icon'));
+  var MISSION_PINS = Array.prototype.slice.call(document.querySelectorAll('.kitchen-fridge-icon, .kitchen-laundry-icon, .kitchen-sink-icon, .kitchen-bins-icon, .kitchen-paper-icon, .kitchen-tv-icon, .kitchen-bubble-icon'));
   // 아바타가 서 있는 동안 핀이 새로 나타나거나(미션 끝 → 다음 핀) 메이트 머리 위 핀이 따라 움직여도 가리지 않게, 걷지 않을 때도 계속 맞춘다
   setInterval(updateDepthSort, 200);
 
@@ -1241,9 +1183,11 @@
     var i = Math.floor(fy * m.h) * m.w + Math.floor(fx * m.w);
     return ((bits || m.bits)[i >> 3] >> (i & 7)) & 1;
   }
+  var ROOM_ALIAS = {}; // 유형별로 바꾼 방 그림 이름 → 기본 그림 이름 (아래 roomSrc 쪽에서 채운다)
   function walkMaskName(img){
     // 파일 이름만 본다. 빌드하면 'assets/table-BN3Ycpy6.png'처럼 해시가 붙으므로 떼고 찾는다
     var name = decodeURIComponent(img.getAttribute('src') || '').split('/').pop();
+    name = ROOM_ALIAS[name] || name;
     return WALK_MASKS[name] ? name : name.replace(/-[\w-]{8}(\.png)$/, '$1');
   }
   function walkMaskOf(img){ return WALK_MASKS[walkMaskName(img)]; }
@@ -1727,12 +1671,14 @@
   // 냉장고를 열 때 서는 자리 - 냉장고 오른쪽 아래, 식탁 앞쪽 바닥 (열린 문 아래쪽만 살짝 가린다).
   // ponytail: 고정 좌표(부엌 % 기준). 충돌 다각형을 크게 바꾸면 같이 옮길 것.
   var FRIDGE_SIDE_POINT = { left:29, top:83 };
+  function fridgeSide(){ return currentRoom === 'utility' ? state.utility.fridgePoint : FRIDGE_SIDE_POINT; }
   kitchenFridgeIcon.addEventListener('click', function(e){
     e.stopPropagation();
     if(fridgeChecked) return;
     clearTimeout(hungerBubbleArmTimer); // 냉장고로 걸어가는 중에 '냉장고를 확인해보자'가 새로 뜨지 않게
     // 냉장고 오른쪽 아래로 걸어가서 냉장고 쪽(왼쪽)을 보고 연다
-    moveTo(FRIDGE_SIDE_POINT.left, FRIDGE_SIDE_POINT.top, function(){
+    var fs = fridgeSide();
+    moveTo(fs.left, fs.top, function(){
       updatePlayerFacing(-1, 0);
       fridgeChecked = true;
       setFridgeImage();
@@ -1745,7 +1691,7 @@
       // 짧게 두 마디 하는 대화창을 먼저 보여주고, 대화가 다 끝난 뒤에 신호를 보낸다.
       showKitchenDialogue(visitorDisplayName, [
         '냉장고가 텅 비었네… 매번 장 보기도 귀찮은데, 어떻게 하지?',
-        "'틈' 앱에 반찬 구독 기능이 있던데, " + mateCallName() + "한테 같이 구독하자고 해볼까?"
+        "'틈' 앱에 반찬 구독 기능이 있던데, 신청하고 비용은 " + mateCallName() + "이랑 나눠 볼까?"
       ], function(){
         // 냉장고가 비어있는 걸 확인했다는 신호를 메인 앱(틈 앱)에 전달해서
         // [정기 반찬 구독권] 안내 투어를 시작시킨다.
@@ -1784,12 +1730,13 @@
     }
     if(!fridgeResolved || kitchenFridgeImg.style.pointerEvents !== 'auto') return;
     e.stopPropagation(); // 냉장고 그림 자리로 걸어가는 일반 이동은 막는다
-    moveTo(FRIDGE_SIDE_POINT.left, FRIDGE_SIDE_POINT.top, function(){
+    var fs = fridgeSide();
+    moveTo(fs.left, fs.top, function(){
       updatePlayerFacing(-1, 0);
       playFridgeFrames([FRIDGE_STOCKED_HALF_SRC, FRIDGE_STOCKED_SRC]);
       var me = (document.getElementById('cohabitVisitorName').textContent || '나').trim() || '나';
       setTimeout(function(){
-        showKitchenDialogue(me, ['이제 음식이 넉넉하니 든든하다! 당분간 밥 걱정은 없겠어.'], function(){
+        showKitchenDialogue(me, ['반찬이 채워져 있으니 든든하다.'], function(){
           playFridgeFrames([FRIDGE_STOCKED_HALF_SRC, FRIDGE_FULL_SRC]);
         }, 'happy');
       }, FRIDGE_OPEN_FRAME_MS * 2 + 150); // 문이 다 열린 뒤에
@@ -1819,13 +1766,26 @@
      가는 버튼이 나타난다. 누르면 캐릭터가 다용도실 쪽 바닥 지점까지 걸어가고,
      도착하면 화면이 잠깐 어두워졌다 밝아지면서 배경이 다용도실로 바뀐다.
      ========================================================= */
-  var KITCHEN_BG_SRC = 'object/kitchen_bg22.png';
-  var UTILITY_BG_SRC = 'object/utility%20room.png'; // 파일명에 공백이 있어 %20으로 인코딩
+  // 방 배경: 기본 그림 + 유형별로 바꾼 그림(room-images.js TEUM_ROOMS). roomSrc(방)이 지금 유형의 그림을 준다
+  var ROOM_BASE = { kitchen:'object/kitchen_bg22.png', utility:'object/kitchen_bg22.png', /* 한방판: 금전형 방 = 부엌 그림 (다용도실 그림은 지움) */
+                    eunminKitchen:'object/clean_kichen_bg.png', living:'object/living_room.png' };
+  var ROOM_TYPES = window.TEUM_ROOMS || {};
+  function roomSrc(room){
+    var t = ROOM_TYPES[activeMateType] || {};
+    return encodeURI(t[room] || ROOM_BASE[room]); // 파일명 공백 → %20
+  }
+  // 바꾼 그림도 걸을 수 있는 영역은 기본 그림 것을 쓴다 (walkMaskName이 파일명을 기본 그림 이름으로 바꿔 찾는다)
+  Object.keys(ROOM_TYPES).forEach(function(type){
+    Object.keys(ROOM_TYPES[type] || {}).forEach(function(room){
+      var f = ROOM_TYPES[type][room];
+      var n = f && f.split('/').pop();
+      if(n && ROOM_BASE[room] && !WALK_MASKS[n]) ROOM_ALIAS[n] = ROOM_BASE[room].split('/').pop(); // 자기 영역이 있는 그림(예: 금전형 kitchen_bg22)은 그대로
+    });
+  });
   var KITCHEN_SCENE_SIZE = { w: SCENE_W, h: SCENE_H };   // 부엌 배경 원본 크기(위에서 이미 선언된 값)
-  var UTILITY_SCENE_SIZE = { w: 2064, h: 2039 };          // utility room.png 원본 크기 (투명 배경으로 새로 교체된 버전)
-  var UTILITY_PLAYER_START = { top: 82, left: 50 };       // 다용도실에 들어갔을 때 캐릭터가 서 있을 좌표
+  var UTILITY_SCENE_SIZE = { w: 2046, h: 1686 };          // 캐릭터 크기 기준 = 방 그림 비율 2046x1686 (예전 2064x2039는 옛 그림 값이라 다용도실에서만 캐릭터가 1% 작았다). 그림을 2배 크기로 뽑아도 이 값은 그대로
+  var UTILITY_PLAYER_START = { top: 94, left: 50 };       // 금전형 방에 들어갔을 때 캐릭터가 서 있을 좌표 - 한방판: 부엌 그림이라 원래 부엌 시작 자리(앞쪽 가운데)
 
-  var kitchenUtilityGotoBtn = document.getElementById('kitchenUtilityGotoBtn');
   var kitchenRoomFade = document.getElementById('kitchenRoomFade');
   var kitchenRoomStage = document.getElementById('kitchenRoomStage');
 
@@ -1843,11 +1803,13 @@
     currentRoom = 'utility';
     SCENE_W = UTILITY_SCENE_SIZE.w;
     SCENE_H = UTILITY_SCENE_SIZE.h;
-    kitchenBgImg.src = UTILITY_BG_SRC;
+    kitchenBgImg.src = roomSrc('utility');
     kitchenBgImg.alt = '다용도실 배경';
     kitchenScene.classList.add('kitchen-scene-utility');
     kitchenScene.classList.remove('kitchen-scene-livingroom');
-    kitchenLivingroomGotoBtn.classList.add('show'); // 다용도실 → 거실은 언제든 (금전형)
+    kitchenScene.classList.remove('kitchen-scene-eunmin'); // 규칙형 부엌에서 유형 탭으로 바로 오면 설거지·쓰레기가 따라왔다
+    renderFridge(); renderFridgeIcon(); // 한방판: 냉장고도 다용도실에
+    renderBubbleIcon(); // 메이트 머리 위 '…' 버튼 크기를 세 유형 같게
     applyRoomAspectRatio();
     playerPos = { x: UTILITY_PLAYER_START.left, y: UTILITY_PLAYER_START.top };
     setPlayerStyle();
@@ -1866,7 +1828,7 @@
     currentRoom = 'kitchen';
     SCENE_W = KITCHEN_SCENE_SIZE.w;
     SCENE_H = KITCHEN_SCENE_SIZE.h;
-    kitchenBgImg.src = KITCHEN_BG_SRC;
+    kitchenBgImg.src = roomSrc('kitchen');
     kitchenBgImg.alt = '부엌 배경';
     kitchenScene.classList.remove('kitchen-scene-utility');
     // 강은지(S) 엔딩 때문에 거실(kitchen-scene-livingroom)까지 갔다가 "처음으로"로
@@ -1875,7 +1837,6 @@
     // 그대로 남아 보이는 문제가 생긴다.
     kitchenScene.classList.remove('kitchen-scene-livingroom');
     kitchenScene.classList.remove('kitchen-scene-eunmin');
-    kitchenLivingroomGotoBtn.classList.remove('show');
     applyRoomAspectRatio();
     // 다용도실에 있다가 부엌으로 돌아올 때(주로 "처음으로" 리셋 후 다시 시작할 때)
     // 캐릭터 좌표를 다용도실 좌표 그대로 들고 오면 하단 모서리~식탁 앞이라는 정해진
@@ -1888,49 +1849,13 @@
     document.body.setAttribute('data-kitchen-room', 'kitchen');
   }
 
-  // 방 전환: 검은 화면 깜빡임 없이 방(집 그림)만 0.3초 흐려졌다가 새 방으로 다시 나타난다 (뒤의 파란 배경은 그대로)
-  function transitionToRoom(switchFn){
-    kitchenScene.style.transition = 'opacity .3s ease';
-    kitchenScene.style.opacity = '0';
-    setTimeout(function(){
-      window.dispatchEvent(new CustomEvent('kitchen:room-switching')); // 화면이 다 어두워진 순간 - 거실로 가던 메이트를 미리 옮겨 둔다
-      switchFn();
-      // 새 배경 해독이 끝나기 전에 밝히면 브라우저가 이전 방 그림을 잠깐 그려서 두 방이 번갈아 보인다 → 해독 끝난 뒤 밝힌다
-      var show = function(){ requestAnimationFrame(function(){ kitchenScene.style.opacity = '1'; }); };
-      if(kitchenBgImg.decode) kitchenBgImg.decode().then(show, show); else show();
-    }, 300);
-  }
-
-  // 미션1이 완전히 끝나야만(반찬 구독 확정) 다용도실 이동 버튼이 나타난다. 다만 이 버튼과
-  // "다음 할 일(빨래)" 말풍선은 축하 대화창을 다 읽고 닫은 뒤에 이어서 나와야 자연스러우므로,
-  // 냉장고 이미지가 즉시 바뀌는 kitchen:fridge-resolved가 아니라 대화창이 닫힌 뒤에 오는
-  // kitchen:mission1-dialogue-done 시점에 띄운다.
-
-
-  // 방 이동 버튼: 캐릭터가 걸어가지 않고 바로 화면만 바뀐다 (걷던 중이면 멈춤)
+  // 걷던 것을 멈춘다
   function stopWalking(){
     // 걷던 도중 끊긴 이동에 정리할 일이 있으면(예: 메이트에게 말 걸러 가던 중) 알려준다
     if(pendingArriveCallback && typeof pendingArriveCallback.onCancel === 'function') pendingArriveCallback.onCancel();
     playerTarget = null; playerPath = []; pendingArriveCallback = null;
     kitchenPlayer.classList.remove('kitchen-is-walking');
   }
-  function goToUtilityRoom(){
-    if(currentRoom !== 'kitchen' || kitchenDialogue.classList.contains('show')) return; // 대화 중엔 이동 안 함
-    stopWalking();
-    transitionToRoom(switchToUtilityRoom);
-  }
-
-  kitchenUtilityGotoBtn.addEventListener('click', function(e){
-    e.stopPropagation();
-    goToUtilityRoom();
-  });
-  // 다용도실 → 부엌
-  document.getElementById('kitchenKitchenGotoBtn').addEventListener('click', function(e){
-    e.stopPropagation();
-    if(currentRoom !== 'utility' || kitchenDialogue.classList.contains('show')) return;
-    stopWalking();
-    transitionToRoom(switchToKitchenRoom);
-  });
   // 냉장고 미션을 마쳐야 다용도실 세탁물 알림이 보인다 (CSS .fridge-done)
   window.addEventListener('kitchen:fridge-resolved', function(){ kitchenScene.classList.add('fridge-done'); });
   window.addEventListener('kitchen:mission-reset', function(){ kitchenScene.classList.remove('fridge-done'); });
@@ -1953,18 +1878,16 @@
      ========================================================= */
   // 미션 전 설거지 더미·쓰레기는 따로 얹는 그림(kitchenDishWashImg·kitchenTrashImg)이라 배경은 처음부터 깨끗한 부엌
   // (예전 dirty_kichen_bg.png = 깨끗한 배경 + 이 두 그림. 그림을 옮기면 배경에 그려진 것이 남아 보여서 바꿨다)
-  var EUNMIN_KITCHEN_DIRTY_SRC = 'object/clean_kichen_bg.png';
-  var EUNMIN_KITCHEN_CLEAN_SRC = 'object/clean_kichen_bg.png';
-  var LIVINGROOM_BG_SRC = 'object/living_room.png';
   // 방 배경(2046x1686)을 처음 바꿀 때 그림 해독 때문에 화면이 잠깐 멈춘다(느린 PC에서 0.2~0.3초) → 미리 읽고 해독해 둔다.
   // 배열에 잡아 둬야 해독된 그림이 버려지지 않는다
-  var roomBgPreload = [KITCHEN_BG_SRC, UTILITY_BG_SRC, EUNMIN_KITCHEN_DIRTY_SRC, EUNMIN_KITCHEN_CLEAN_SRC, LIVINGROOM_BG_SRC].map(function(src){
+  var roomBgList = Object.keys(ROOM_BASE).map(function(r){ return encodeURI(ROOM_BASE[r]); });
+  Object.keys(ROOM_TYPES).forEach(function(t){ Object.keys(ROOM_TYPES[t] || {}).forEach(function(r){ if(ROOM_TYPES[t][r]) roomBgList.push(encodeURI(ROOM_TYPES[t][r])); }); });
+  var roomBgPreload = roomBgList.map(function(src){
     var im = new Image(); im.src = src; if(im.decode) im.decode().catch(function(){}); return im;
   });
   var EUNMIN_KITCHEN_PLAYER_START = { top: 92, left: 50 };  // 서은민 부엌에 들어갔을 때 캐릭터가 서 있을 좌표
   var LIVINGROOM_PLAYER_START = { top: 85, left: 38 };      // 거실에 들어갔을 때 캐릭터가 서 있을 좌표 - 식탁 가운데(고지서 핀) 앞을 가리지 않게 왼쪽(금전형 메이트는 오른쪽에 섬)
 
-  var kitchenLivingroomGotoBtn = document.getElementById('kitchenLivingroomGotoBtn');
   var activeMateType = 'S'; // 'S' | 'A' | 'H' - kitchen:set-mate-type 이벤트로 갱신됨
   var eunminMission1Done = false;
   var eunminMission2Done = false;
@@ -1976,11 +1899,12 @@
     currentRoom = 'eunminkitchen';
     SCENE_W = KITCHEN_SCENE_SIZE.w;
     SCENE_H = KITCHEN_SCENE_SIZE.h;
-    kitchenBgImg.src = eunminMission1Done ? EUNMIN_KITCHEN_CLEAN_SRC : EUNMIN_KITCHEN_DIRTY_SRC;
+    kitchenBgImg.src = roomSrc('eunminKitchen');
     kitchenBgImg.alt = '서은민 부엌 배경';
     kitchenScene.classList.remove('kitchen-scene-utility');
     kitchenScene.classList.remove('kitchen-scene-livingroom');
     kitchenScene.classList.add('kitchen-scene-eunmin');
+    renderPaperIcon(); // 한방판: 생활비 고지서도 부엌 식탁 위에
     applyRoomAspectRatio();
     playerPos = (fromLivingroom === true)
       ? { x: state.eunminKitchen.livingroomPoint.left, y: state.eunminKitchen.livingroomPoint.top }
@@ -1992,8 +1916,6 @@
     renderSinkIcon();
     renderBinsIcon();
     renderBubbleIcon();
-    // 미션 순서와 상관없이 부엌 <-> 거실을 자유롭게 오갈 수 있도록 거실 이동 버튼은 항상 보인다.
-    kitchenLivingroomGotoBtn.classList.add('show');
     document.body.setAttribute('data-kitchen-room', 'eunminkitchen');
   }
 
@@ -2001,19 +1923,16 @@
     currentRoom = 'livingroom';
     SCENE_W = KITCHEN_SCENE_SIZE.w;
     SCENE_H = KITCHEN_SCENE_SIZE.h;
-    kitchenBgImg.src = LIVINGROOM_BG_SRC;
+    kitchenBgImg.src = roomSrc('living');
     kitchenBgImg.alt = '거실 배경';
     kitchenScene.classList.remove('kitchen-scene-utility');
     kitchenScene.classList.remove('kitchen-scene-eunmin');
     kitchenScene.classList.add('kitchen-scene-livingroom');
+    renderBubbleIcon(); // 메이트 머리 위 '…' 버튼 크기를 세 유형 같게
     applyRoomAspectRatio();
     playerPos = { x: LIVINGROOM_PLAYER_START.left, y: LIVINGROOM_PLAYER_START.top };
     setPlayerStyle();
     updatePlayerFacing(0, 1); // 방에 들어서면 정면을 본다 (예전엔 직전 방에서 보던 방향 그대로라 유형마다 달랐다)
-    // [거실로 이동하기] 버튼은 서은민 부엌 화면 전용이라 room-scoped CSS가 따로 없다 -
-    // 거실로 넘어온 다음에도 .show 클래스가 남아있으면 계속 떠 있으므로 직접 꺼준다.
-    kitchenLivingroomGotoBtn.classList.remove('show');
-    document.getElementById('kitchenLivingBackBtn').textContent = activeMateType === 'A' ? '← 부엌' : '← 다용도실';
     renderPaperIcon();
     document.body.setAttribute('data-kitchen-room', 'livingroom');
     // 거실로 넘어오면 태블릿 앱 화면도 [틈새살림](정산) 화면으로 바꿔준다. appShowScreen은
@@ -2026,27 +1945,9 @@
   }
 
 
-  // 거실로: 다른 방 이동 버튼처럼 캐릭터가 걷지 않고 바로 전환
-  function goToLivingroomRoom(){
-    if(!kitchenLivingroomGotoBtn.classList.contains('show') || kitchenDialogue.classList.contains('show')) return;
-    if(currentRoom !== 'eunminkitchen' && currentRoom !== 'utility') return;
-    stopWalking();
-    transitionToRoom(switchToLivingroomRoom);
-  }
-  // 거실에서 돌아가기: 금전형 = 다용도실, 규칙형 = 부엌
-  document.getElementById('kitchenLivingBackBtn').addEventListener('click', function(e){
-    e.stopPropagation();
-    if(currentRoom !== 'livingroom' || kitchenDialogue.classList.contains('show')) return;
-    stopWalking();
-    transitionToRoom(activeMateType === 'A' ? function(){ switchToEunminKitchenRoom(true); } : switchToUtilityRoom);
-  });
   window.addEventListener('kitchen:laundry-resolved', function(){ kitchenScene.classList.add('laundry-done'); });
   window.addEventListener('kitchen:mission-reset', function(){ kitchenScene.classList.remove('laundry-done'); });
 
-  kitchenLivingroomGotoBtn.addEventListener('click', function(e){
-    e.stopPropagation();
-    goToLivingroomRoom();
-  });
 
   // 메인 앱(첫 번째 <script> 블록)이 코드 확인 직후 알려주는 지금 메이트 타입에 맞춰
   // 부엌 배경/미니게임 상태를 준비한다 (S: 기존 부엌, A: 서은민 전용 부엌).
@@ -2065,7 +1966,7 @@
       eunminEndingDone = false;
       switchToEunminKitchenRoom();
     } else {
-      switchToKitchenRoom();
+      switchToUtilityRoom(); // 한방판: 금전형은 다용도실 하나 (냉장고도 여기)
     }
   });
 
@@ -2079,7 +1980,7 @@
   var EUNMIN_TASK_LINES = {
     dish: [
       '그릇이 잔뜩 쌓였네… 설거지는 누가 언제 하면 좋을까?',
-      "'틈' 앱에서 설거지 규칙을 정해서 메이트와 함께 지켜볼까?"
+      "'틈' 앱에서 설거지 담당 규칙을 정해 볼까?"
     ],
     recycle: [
       '분리수거 통이 꽉 찼네… 이번 주에는 내 담당이었지?',
@@ -2120,7 +2021,7 @@
   // 그림이 있는(불투명) 곳만 - 투명한 곳은 보통 클릭(그 자리로 걷기). file://에선 그림 픽셀을 못 읽어서 모양을 미리 뽑아 둔다
   // (scripts/walk_masks.py와 같은 형식, 96칸. 그림을 바꾸면 다시 뽑을 것)
   var MESS_CLICK_MASKS = {
-    'dish wash.png':{w:96,h:55,b:"AAAAAAAAwAAAAAAAAAAAAAAAwAEAPwAAAAAAAAAAwAOA/wcAAAAAAAAAgAfA/x8AAAAAAAAAAAf4/z8AAAAAAAAAAA/+/38AAAAAAAAAGJ7///8AAAAAAAAAP/z///8AAAAAAACAP/z///8BAAAAAACAP/////8DAAAAAACAv/////8PAAAAAACAn/////8/AAAAAAC8n/////9/AAAAAAD+j///////AAAAAAD/n///////AAAAAAD///////9/AAAAAAD///////9/AAAAAAD///////9/AAAAAAD///////9/AAAAAAD///////9/AAAAAAD///////9/AAAAAAD///////9/AAAAAAD///////9/AAAAAAD///////9/AAA8AAD+//////9/AAB+AAD8//////8fAAD+AADg//////8HAAD+AQDg//////8BAgD+AwDg/////z8AB4D/NwDg/////w8ADsD//3/A/////wEAHsD///+B//8/fgAAHMD///+D//8/CAAAOMD///+P/f4/AAAAMMD////fOP4/AAAAcMD/////HPw/AAAA4M//////D/wfAAAA+P//////B/gPAAAA/P//////B8ADAAAA////////PwAAAAAA////////PwAAAAAA////////BwAAAAAA////////AQAAAAAA//////8/AAAAAAAA//////8PAAAAAAAA/v////8DAAAAAAAA+P///38AAAAAAAAA8P///x8AAAAAAAAAwP///wcAAAAAAAAAAP///wAAAAAAAAAAAPz/PwAAAAAAAAAAAPD/BwAAAAAAAAAAAMD/AQAAAAAAAAAAAIA/AAAAAAAAAAAAAAAOAAAAAAAAAAAA"},
+    'dish wash.png':{w:96,h:56,b:"AAAAAAAAAAMAAAAAAAAAAAAAAAcAfgAAAAAAAAAAAA8A/w8AAAAAAAAAAA6A/z8AAAAAAAAAABzw/38AAAAAAAAAADz8//8AAAAAAAAAAHj///8AAAAAAAAAAPD///8BAAAAAAAAAPj///8BAAAAAAAAAP7///8HAAAAAAAAAP7///8fAAAAAAAAAP7///8/AAAAAAAAAP7/////AAAAAAAAAP7/////AAAAAAAA4P//////AAAAAAAA/P////9/AAAAAAAA/v////9/AAAAAAAA//////9/AAAAAACA//////9/AAAAAACA//////9/AAAAAACA//////9/AAAAAACA//////9/AAAAAACA//////9/AAAAAACA//////9/AAAAAACA//////8fAAAAAACA//////8HAAAeAACA//////8BAAA/AACA/////z8AAAB/AACA/////w8AAAD+AAAA/////wMAAgD/AQAA/v9/fAAAB8D/HwAA+P9/AAAADuD//38AAPh/AAAAHuD///9gAPh/AAAAHOD///9hDPh/AAAAOOD///83DvA/AAAAcOD///8/B8AfAAAAcOD/////AwAAAAAA4P//////AQAAAAAA+P//////AwAAAAAA/v//////DwAAAAAA////////BwAAAAAA////////AQAAAAAA//////9/AAAAAAAA//////8PAAAAAAAA//////8DAAAAAAAA/v////8AAAAAAAAA/P///x8AAAAAAAAA8P///wcAAAAAAAAAwP///wEAAAAAAAAAAP//PwAAAAAAAAAAAPz/DwAAAAAAAAAAAPD/AwAAAAAAAAAAAMD/AAAAAAAAAAAAAIAfAAAAAAAAAAAAAAACAAAAAAAAAAAA"},
     'trash.png':{w:96,h:68,b:"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACABwAAAAAAAAAAAADADwAAAAAAAAAAAADADwAAAAAAAAAAAADADwAAAAAAAAAAAADgDwAAAAAAAAAAAADwBwAAAAAAAAAAAAD8DwAAAAAAAAAAAAP/HwAAAAAAAAAAwO//PwcAAAAAAAAA4P///w8AAAAAAAAA4P///w8AAAAAAAAA4P///x8AAAAAAAAA8P///z8AAAAAAAAA8P////8AAAAAAAAA8P////8DAAAAAAAA8P////8PAAAAAAAA8P////8fAAAAAAAA+P////8/AAAAAAAA/v//////AwAAAAAA////////DwAAAAAA/P//////PwAAAAAA8P//////fwAAAAAAwP///////wEAAAAAAP///////z8AAAAAAPz//////38AAAAAAPD//////38AAAAAAMD///////8AAAAAAAD///////8DAwAAAAD8//////+PBwAAAADw//////+/DwAAAADA////////PwAAAAAA////////fwAAAAAA/P///////wAAAAAA8P///////wEAAAAAwP///////wEAAAAAAP///////wMAAAAAAPz//////48HAAAAAPD///////8HAAAAAMD///////8HAAAAAAD///////8HAAAAAAD8//////8HAAAAAADw//////8DAAAAAADA//////8DAAAAAAAA//////8DAAAAAAAA/P////8DAAAAAAAA8P////8DAAAAAAAAwP////8DAAAAAAAAAP////8AAAAAAAAAAPz//z8AAAAAAAAAAPD//w8AAAAAAAAAAMD//wcAAAAAAAAAAAD//wEAAAAAAAAAAAD8fwAAAAAAAAAAAADwHwAAAAAAAAAAAACADwAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}
   };
   function onMessPixel(img, e){
@@ -2143,12 +2044,12 @@
   // 끝낸 미션 자리를 다시 누르면 (금전형 냉장고·빨래처럼) 그 앞으로 걸어가 한마디 - 깨끗해진 싱크대·쓰레기통, 정산을 끝낸 식탁 위 종이
   // 미션 전 식탁 위 종이 그림을 누르면 고지서 핀과 같다 (설거지 더미·쓰레기 그림처럼)
   var EUNMIN_REVISIT = {
-    dish:{ line:'설거지 담당을 정해 두니까 싱크대가 늘 깨끗하네!', point:function(){ return state.eunminKitchen.sinkPoint; }, icon:function(){ return kitchenSinkIcon; } },
-    recycle:{ line:'분리수거 담당도 정했으니 쓰레기통이 넘칠 일이 없겠어.', point:function(){ return state.eunminKitchen.binsPoint; }, icon:function(){ return kitchenBinsIcon; } },
-    paper:{ line:'이번 달 정산은 끝! 다음 달에도 틈에서 정리하면 되겠다.', point:function(){ return LIVING_DESK_SIDE; }, icon:function(){ return kitchenPaperIcon; } }
+    dish:{ line:'설거지 담당을 정해 두니 싱크대가 깔끔하네.', point:function(){ return state.eunminKitchen.sinkPoint; }, icon:function(){ return kitchenSinkIcon; } },
+    recycle:{ line:'분리수거 당번도 정해 두니 마음이 편하다.', point:function(){ return state.eunminKitchen.binsPoint; }, icon:function(){ return kitchenBinsIcon; } },
+    paper:{ line:'이번 달 정산은 끝!', point:function(){ return paperStand(); }, icon:function(){ return kitchenPaperIcon; } }
   };
   function onPaperArea(e){ // 식탁 위 종이 자리 (종이 핀 바로 아래)
-    var sr = kitchenScene.getBoundingClientRect(), ic = state.livingroom.paperIcon;
+    var sr = kitchenScene.getBoundingClientRect(), ic = paperPos();
     var x = (e.clientX - sr.left) / sr.width * 100, y = (e.clientY - sr.top) / sr.height * 100;
     return Math.abs(x - ic.left) <= 4.5 && y >= ic.top - 2 && y <= ic.top + 10;
   }
@@ -2162,7 +2063,7 @@
     if(activeMateType !== 'A' || !kitchenScene.classList.contains('game-started') || kitchenDialogue.classList.contains('show') || document.body.classList.contains('app-drawer-open')) return null;
     var inRect = function(el){ var r = el.getBoundingClientRect(); return r.width && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
     if(currentRoom === 'eunminkitchen' && eunminMission1Done){ if(inRect(kitchenDishWashImg)) return 'dish'; if(inRect(kitchenTrashImg)) return 'recycle'; }
-    if(currentRoom === 'livingroom' && onPaperArea(e)){
+    if(inRoom('livingroom') && onPaperArea(e)){
       if(eunminMission2Done) return 'paper';
       if(!eunminPaperChecked) return 'paperStart';
     }
@@ -2174,7 +2075,7 @@
     e.stopPropagation();
     if(t === 'paperStart'){ kitchenPaperIcon.click(); return; }
     if(t === 'fbStart'){ document.getElementById('kitchenFbIcon').click(); return; }
-    if(t === 'fbRevisit'){ revisitSay(LIVING_DESK_SIDE, mateCallName() + '과 마음을 나누고 나니까 한결 가까워진 것 같아.', document.getElementById('kitchenFbIcon')); return; }
+    if(t === 'fbRevisit'){ revisitSay(LIVING_DESK_SIDE, '피드백을 주고받고 나니 한결 편해졌다.', document.getElementById('kitchenFbIcon')); return; }
     var o = EUNMIN_REVISIT[t], pt = o.point(), me = (document.getElementById('cohabitVisitorName').textContent || '나').trim() || '나';
     moveTo(pt.left, pt.top, function(){ faceToward(o.icon()); showKitchenDialogue(me, [o.line], null, 'happy'); });
   }, true);
@@ -2223,37 +2124,31 @@
     kitchenCelebrate.classList.add('show'); celebrateBurst();
     eunminMission1Done = true;
     if(currentRoom === 'eunminkitchen'){
-      kitchenBgImg.src = EUNMIN_KITCHEN_CLEAN_SRC;
+      kitchenBgImg.src = roomSrc('eunminKitchen');
     }
     renderEunminMess();
     var visitorDisplayName = (document.getElementById('cohabitVisitorName').textContent || '나').trim() || '나';
     showKitchenDialogue(visitorDisplayName, [
-      '서로를 위한 규칙을 정하니 집이 훨씬 깨끗해졌어!'
+      '설거지·분리수거 규칙 정하기 끝! 이제 덜 쌓이겠지?'
     ], function(){
       kitchenCelebrate.classList.remove('show');
       eunminReact('m1', function(){ window.dispatchEvent(new CustomEvent('kitchen:eunmin-mission1-dialogue-done')); });
     }, 'happy');
   }
   window.addEventListener('kitchen:eunmin-mission1-complete', showEunminMission1Celebrate);
-  // 금전형과 같은 틀: 미션을 마치면 메이트가 반응하고 다음 할 일로 이끈다. 같은 방이면 대화, 다른 방이면 채팅 메시지
+  // 금전형과 같은 틀: 첫 미션을 마쳤을 때만 메이트가 남은 미션을 한 번 귀띔하고 자기 일 하러 간다 (매번 대답하지 않는다)
   function eunminReact(kind, after){
-    var reply = kind === 'm1' ? '규칙을 정해 두니까 부엌이 한결 깔끔해졌네요!' : '정산 요청 확인했어요. 바로 보내드릴게요!';
-    var next = (eunminMission1Done && eunminMission2Done) ? '오늘 할 일을 다 끝냈네요! 아, 외부인 초대 규칙 투표 하나 올려둘게요.'
-             : kind === 'm1' ? '거실에 생활비 고지서가 와 있던데, 저도 얼마 나왔는지 궁금했어요.' : '부엌 설거지랑 분리수거도 정해 두면 좋겠어요.';
-    // 메이트가 다른 방이면 반응 없이 넘어간다 (예전엔 오른쪽 위에 채팅 메시지로 보냈다 - 금전형처럼 내 다음 할 일 말풍선만)
-    if(mateVisible() && !mate.leaving) mateSpeak(mateDisplayName(), [['happy', reply], [(eunminMission1Done && eunminMission2Done) ? 'happy' : 'worry', next]], after); // 남은 일 얘기는 걱정
+    var hint = (eunminMission1Done && eunminMission2Done) ? ''
+             : kind === 'm1' ? '식탁 위에 생활비 고지서도 와 있더라고요.\n그럼 저는 다른 일 하고 있을게요!'
+             : '싱크대랑 분리수거 통도 꽉 차 있더라고요.\n그럼 저는 다른 일 하고 있을게요!';
+    if(hint && mateVisible() && !mate.leaving) mateSpeak(mateDisplayName(), [['happy', hint]], after);
     else after();
   }
 
-  // 미션1(부엌)과 미션2(거실 정산)는 순서 상관없이 할 수 있다 - 둘 다 끝났을 때만 게임 종료로 넘어간다.
-  // 축하 대화창을 다 읽고 닫은 뒤: 정산이 남았으면 거실로 가보라는 말풍선, 이미 끝났으면 엔딩.
+  // 미션1(설거지·분리수거)과 미션2(식탁 고지서 정산)는 순서 상관없이 - 둘 다 끝나면 세 번째 미션(새 안건)으로.
+  // 축하 대화창을 다 읽고 닫은 뒤: 정산이 남았으면 고지서를 보라는 말풍선.
   window.addEventListener('kitchen:eunmin-mission1-dialogue-done', function(){
-    if(eunminMission2Done){ agendaBegin(); return; } // 이걸로 끝나면 메이트는 떠나지 않고 이 자리에 - 세 번째 미션은 메이트가 올린 새 안건
-    var mateSpoke = mateMoveToLiving(); // 금전형처럼 미션1을 마치면 메이트가 거실로 옮겨 간다
-    // 메이트가 한마디 하는 동안엔 내 말풍선을 미룬다 (말풍선은 한 번에 하나만 보여서 메이트 말이 지워졌다)
-    setTimeout(function(){
-      if(!eunminMission2Done) showPlayerBubble('이제 거실 고지서도 정리해볼까?', HUNGER_BUBBLE_DURATION);
-    }, mateSpoke ? 2000 : 0);
+    if(eunminMission2Done) agendaBegin(); // 세 번째 미션은 메이트가 올린 새 안건 (남은 미션은 메이트가 방금 귀띔했다)
   });
 
   // app_3(틈새살림)에서 정산 요청을 보내면(teum-app3 message) 이 이벤트가 온다 -
@@ -2265,12 +2160,9 @@
     celebrateBurst(); // 금전형 미션 완료처럼 축하 폭죽
     var visitorDisplayName = (document.getElementById('cohabitVisitorName').textContent || '나').trim() || '나';
     showKitchenDialogue(visitorDisplayName, [
-      '덕분에 이번 달 지출도 깔끔하게 정리됐어!\n혼자가 아니라는 게 이렇게 든든할 줄이야.'
+      '이번 달 생활비 정산 끝! 나눠 내니까 부담이 덜하다.'
     ], function(){
-      eunminReact('m2', function(){
-        if(eunminMission1Done){ agendaBegin(); return; }
-        showPlayerBubble('이제 부엌도 깨끗하게 정리해볼까?', HUNGER_BUBBLE_DURATION);
-      });
+      eunminReact('m2', function(){ if(eunminMission1Done) agendaBegin(); });
     }, 'happy');
   });
 
@@ -2329,8 +2221,8 @@
   document.getElementById('kitchenTvImg').addEventListener('click', function(e){
     if(kitchenDialogue.classList.contains('show')) return;
     e.stopPropagation();
-    if(emotionTvDone){ revisitSay(LIVING_TV_SIDE, '안 볼 땐 끄고 콘센트까지 뽑아 두니까 마음이 편하네.', kitchenTvIcon); return; } // 끝낸 뒤 다시 누르면 한마디
-    if(emotionChatDone){ revisitSay(LIVING_TV_SIDE, '안건으로 올려 뒀으니 같이 방법을 찾아보자.', kitchenTvIcon); return; }
+    if(emotionTvDone){ revisitSay(LIVING_TV_SIDE, '안 볼 땐 꺼 두기로 했지.', kitchenTvIcon); return; } // 끝낸 뒤 다시 누르면 한마디
+    if(emotionChatDone){ revisitSay(LIVING_TV_SIDE, '안건에 올려 뒀으니 댓글을 기다려 보자.', kitchenTvIcon); return; }
     kitchenTvIcon.click();
   });
   window.addEventListener('kitchen:emotion-tv-done', function(){ // 미션1(채팅 → 안건 등록) 끝
@@ -2339,10 +2231,10 @@
     kitchenCelebrate.classList.remove('show'); void kitchenCelebrate.offsetWidth;
     kitchenCelebrate.classList.add('show'); celebrateBurst();
     var me = (document.getElementById('cohabitVisitorName').textContent || '나').trim() || '나';
-    showKitchenDialogue(me, ['안건으로 올려 뒀으니, 같이 줄일 방법을 찾을 수 있겠다!'], function(){
+    showKitchenDialogue(me, ['전기세 안건 올리기 끝! 댓글을 기다려 보자.'], function(){
       kitchenCelebrate.classList.remove('show');
       // 감정형은 순서대로: 미션1 채팅 → 미션2 안건(메이트 댓글 알림) → 미션3 피드백
-      if(mateVisible()) mateSay(['안건 올려 줘서 고마워요. 같이 방법을 찾아봐요!', '제 생각도 안건에 댓글로 남겨둘게요.'], agendaBegin); else agendaBegin();
+      if(mateVisible()) mateSay(['제 생각은 안건에 댓글로 남겨둘게요.\n그럼 저는 다른 일 하고 있을게요!'], agendaBegin); else agendaBegin();
     }, 'happy');
   });
 
@@ -2359,12 +2251,12 @@
     kitchenFbIcon.style.left = state.livingroom.paperIcon.left + '%';
     kitchenFbIcon.style.top = state.livingroom.paperIcon.top + '%';
   }
-  window.addEventListener('kitchen:game-start', function(){ if(activeMateType === 'H') setEmotionFbReady(true); }); // TV 핀과 함께 처음부터 - 시작은 안건(미션2)을 마친 뒤
+  window.addEventListener('kitchen:game-start', function(){ if(activeMateType === 'H') setEmotionFbReady(true); }); // TV 핀과 함께 처음부터 - 채팅 전이나 안건 확인 뒤에 시작 (채팅~안건 확인 사이만 막음)
   kitchenFbIcon.addEventListener('click', function(e){
     e.stopPropagation();
     if(!emotionFbReady || emotionFbBusy || emotionFbDone || kitchenDialogue.classList.contains('show') || document.body.classList.contains('app-drawer-open')) return;
-    if(!emotionEndingDone){ // 순서대로: 채팅 → 안건 → 피드백. 핀은 떠 있지만 아직이면 한마디
-      revisitSay(LIVING_DESK_SIDE, emotionChatDone ? '피드백은 전기세 안건부터 확인하고 써야겠다.' : '피드백은 켜져 있는 TV부터 확인하고 써야겠다.', kitchenFbIcon);
+    if(emotionChatDone && !emotionEndingDone){ // 피드백은 채팅 전에도 할 수 있지만, 안건을 올렸으면 확인까지 이어서
+      revisitSay(LIVING_DESK_SIDE, '피드백은 전기세 안건부터 확인하고 써야겠다.', kitchenFbIcon);
       return;
     }
     emotionFbBusy = true;
@@ -2387,10 +2279,11 @@
     kitchenCelebrate.classList.remove('show'); void kitchenCelebrate.offsetWidth;
     kitchenCelebrate.classList.add('show'); celebrateBurst();
     var me = (document.getElementById('cohabitVisitorName').textContent || '나').trim() || '나';
-    showKitchenDialogue(me, ['말로 꺼내기 어려웠던 마음을 전하고 나니 한결 가벼워졌어!', '주방 정리는 나도 더 신경 써야겠다.'], function(){
+    showKitchenDialogue(me, ['피드백 주고받기 끝! 마음을 전하고 나니 한결 가볍다.', '주방 정리는 나도 더 신경 써야겠다.'], function(){
       kitchenCelebrate.classList.remove('show');
-      // 마지막(세 번째) 미션 - 끝나면 하루 마무리
-      if(mateVisible()) mateSay(['피드백 잘 받았어요. 늦게 TV 볼 땐 소리를 줄일게요!', '이렇게 서로 마음을 나누니 참 좋네요. 앞으로도 편하게 이야기해요.'], finishEunminDay); else finishEunminDay();
+      // 피드백은 안건보다 먼저 할 수도 있다 - 안건까지 끝났을 때만 하루 마무리
+      var next = emotionEndingDone ? finishEunminDay : function(){};
+      if(mateVisible()) mateSay(['피드백 잘 받았어요. 늦게 TV 볼 땐 소리를 줄일게요!', '이렇게 서로 마음을 나누니 참 좋네요. 앞으로도 편하게 이야기해요.'], next); else next();
     }, 'happy');
   });
   ['kitchen:set-mate-type', 'kitchen:mission-reset'].forEach(function(ev){
@@ -2398,9 +2291,12 @@
   });
   kitchenPaperIcon.addEventListener('click', function(e){
     e.stopPropagation();
-    if(eunminPaperChecked || eunminMission2Done || currentRoom !== 'livingroom') return;
-    moveTo(LIVING_DESK_SIDE.left, LIVING_DESK_SIDE.top, function(){ // 고지서를 가리지 않게 책상 옆 (LIVING_DESK_SIDE)
-      faceToward(kitchenPaperIcon); // 식탁 위 종이를 본다 (예전엔 걸어온 방향 그대로라 옆을 보고 있었다)
+    if(eunminPaperChecked || eunminMission2Done || !inRoom('livingroom')) return;
+    var ps = paperStand();
+    moveTo(ps.left, ps.top, function(){ // 고지서를 가리지 않게 책상 옆 (LIVING_DESK_SIDE)
+      // 식탁 위 고지서 쪽을 옆으로 본다 - 핀은 그림보다 높이 떠 있어 핀 쪽을 보면 뒷모습이 됐다
+      var nt = state.eunminKitchen.notice;
+      if(currentRoom === 'eunminkitchen') updatePlayerFacing(nt.left + nt.width / 2 - playerPos.x, 0); else faceToward(kitchenPaperIcon);
       eunminPaperChecked = true;
       kitchenPaperIcon.style.display = 'none'; // 고지서 그림은 정산을 끝낼 때까지 둔다(읽는 동안 보이게)
       var visitorDisplayName = (document.getElementById('cohabitVisitorName').textContent || '나').trim() || '나';
@@ -2484,7 +2380,7 @@
   function mateVisible(){ return mate.active && mate.room === currentRoom; }
   // 규칙형도 금전형처럼 고정 NPC - 미션1을 마치고 거실로 걸어 나갈 때(leaving)만 움직인다
   function mateMovable(){ return mate.active && mate.leaving && !mate.hold; }
-  var SEO_MATE_POS_KITCHEN = { x:69, y:61 }; // 부엌 - 조리대(오븐) 바로 앞. 예전 y65는 식탁과의 통로를 막아 싱크대↔쓰레기통을 식탁 뒤로 빙 돌아갔다
+  var SEO_MATE_POS_KITCHEN = { x:56, y:54.5 }; // 부엌 - 조리대 안쪽 모서리 앞(가운데 쪽, 10-18 요청). 조리대에 붙여 세워야 식탁 뒤 통로가 안 막힌다 (메이트 그림 자리는 못 지나감 - 55/59처럼 앞으로 나오면 쓰레기통 쪽으로 못 감). 예전 y65는 식탁과의 통로를 막아 싱크대↔쓰레기통을 식탁 뒤로 빙 돌아갔다
   var SEO_MATE_POS_LIVING = { x:24, y:59 };  // 거실 - 감정형 메이트 거실 자리(SEO_MATE_POS_EMOTION)와 같은 곳
   var SEO_MATE_POS_EMOTION = { x:24, y:59 }; // 감정형 거실 - 소파 바로 앞(뒤가 소파라 캐릭터가 메이트 뒤로 못 지나감)
   function mateSchedule(fn, ms){ clearTimeout(mate.timer); mate.timer = setTimeout(fn, ms); }
@@ -2589,6 +2485,7 @@
   }
   // 문까지 걸어간 뒤 사라져서 다른 방으로 간다.
   function mateLeaveRoom(){
+    if(ONE_ROOM[activeMateType]){ mate.leaving = false; mate.goingLiving = false; return; } // 한방판: 거실로 가지 않는다
     mate.leaving = false;
     mate.goingLiving = false;
     mate.room = 'livingroom';
@@ -2596,72 +2493,8 @@
     mateFace('front');
     mateRender();  // 지금 보고 있는 방이 아니므로 서서히 사라지고, 거실에선 그 자리에 서 있다
   }
-  // 미션1을 마치면 거실로: 부엌에서 보고 있으면 한마디 하고 부엌 문(거실 이동 지점)으로 걸어 나가고, 아니면 바로 옮겨 둔다
-  function mateMoveToLiving(){
-    if(!mate.active || mate.room === 'livingroom' || mate.leaving) return false;
-    if(!mateVisible() || mate.hold){ mateLeaveRoom(); return false; }
-    mate.goingLiving = true; // 한마디 하는 동안 방을 옮겨도 거실로 가 있게 (mateOnRoomChanged)
-    kitchenMateBubble.style.left = mate.x + '%';
-    kitchenMateBubble.style.top = mate.y + '%';
-    showPlayerBubble('저는 거실 정리 좀 하고 있을게요!', 1800, kitchenMateBubble);
-    mateSchedule(function(){
-      if(!mate.active || mate.room === 'livingroom') return;
-      if(!mateVisible() || mate.hold){ mateLeaveRoom(); return; }
-      mate.leaving = true;
-      seoLeaveWalk();
-    }, 1800);
-    return true;
-  }
-  // 금전형 메이트가 거실로 걸어 나가는 것과 같은 방식: 걸을 수 있는 바닥으로 길을 찾아 나와 비슷한 속도로 걷고,
-  // 남은 길이 0.6초 거리 안이면 서서히 사라진 뒤, 완전히 숨긴 다음 거실 자리로 옮긴다 (예전엔 느리게 걷다가 문 앞에서 흐려지는 동안 거실 좌표로 옮겨져 다른 자리에서 사라지는 것처럼 보였다)
   var seoLeaveRaf = null;
   function seoLeaveCancel(){ if(seoLeaveRaf){ cancelAnimationFrame(seoLeaveRaf); seoLeaveRaf = null; } kitchenSeoMate.style.opacity = ''; kitchenSeoMate.style.transition = ''; kitchenSeoMate.classList.remove('kitchen-is-walking'); }
-  function seoLeaveWalk(){
-    var door = MATE_ROOMS.eunminkitchen.door(), pos = { x:mate.x, y:mate.y };
-    var path = findWalkPath(pos.x, pos.y, door.x, door.y);
-    var total = 0, prev = pos;
-    path.forEach(function(p){ total += Math.hypot((p.x - prev.x) * SCENE_ASPECT, p.y - prev.y); prev = p; });
-    var walked = 0, last = null, axis = null, SPEED = playerSpeed * 0.8;
-    kitchenSeoMate.classList.add('kitchen-is-walking');
-    kitchenBubbleIcon.classList.remove('mate-on');
-    (function step(ts){
-      seoLeaveRaf = null;
-      if(!mate.leaving) return;
-      if(kitchenDialogue.classList.contains('show') || document.body.classList.contains('app-drawer-open')){ last = ts; seoLeaveRaf = requestAnimationFrame(step); return; }
-      var dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000);
-      last = ts;
-      var budget = SPEED * dt;
-      while(budget > 0 && path.length){
-        var wp = path[0], dx = wp.x - pos.x, dy = wp.y - pos.y, d = Math.hypot(dx * SCENE_ASPECT, dy);
-        if(d > 0.001){
-          var ax = Math.abs(dx) * SCENE_ASPECT, ay = Math.abs(dy);
-          if(axis !== 'h' && ax > ay * 1.3) axis = 'h'; else if(axis !== 'v' && ay > ax * 1.3) axis = 'v'; else if(!axis) axis = ax >= ay ? 'h' : 'v';
-          mateFace(axis === 'h' ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'front' : 'back'));
-        }
-        if(d <= budget){ pos.x = wp.x; pos.y = wp.y; path.shift(); budget -= d; walked += d; }
-        else { pos.x += dx / d * budget; pos.y += dy / d * budget; walked += budget; budget = 0; }
-      }
-      mate.x = pos.x; mate.y = pos.y;
-      kitchenSeoMate.style.left = mate.x + '%';
-      kitchenSeoMate.style.top = mate.y + '%';
-      mateDepth();
-      kitchenSeoMate.style.opacity = Math.max(0, Math.min(1, (total - walked) / (SPEED * 0.6)));
-      if(path.length){ seoLeaveRaf = requestAnimationFrame(step); return; }
-      // 문 앞에서 남은 만큼 마저 서서히 사라진 뒤(0.25초), 숨긴 채로 거실 자리로 옮긴다
-      kitchenSeoMate.classList.remove('kitchen-is-walking');
-      kitchenSeoMate.style.transition = 'opacity .25s ease';
-      kitchenSeoMate.style.opacity = '0';
-      setTimeout(function(){
-        if(!mate.leaving) return;
-        kitchenSeoMate.style.transition = 'none';
-        kitchenSeoMate.classList.remove('show');
-        mateLeaveRoom();
-        void kitchenSeoMate.offsetWidth;
-        kitchenSeoMate.style.opacity = '';
-        kitchenSeoMate.style.transition = '';
-      }, 260);
-    })(performance.now());
-  }
   // 다른 방(화면 밖)에 있던 메이트가 시간이 지나 반대쪽 방으로 넘어간다.
   function mateOffscreenTick(){
     if(!mate.active || mateVisible()) return;
@@ -2731,7 +2564,7 @@
      미션(앱) 진행 중엔 서랍이 열려 룸이 잠기므로 메이트를 누를 수 없다 - 그래서 '진행 중' 상태는 없다. */
   function seoMateTalkLines(){
     if(activeMateType === 'H'){ // 감정형 - 순서대로: 미션1 채팅(전기세 안건 올리기) → 미션2 안건 확인 → 미션3 피드백
-      if(emotionFbDone) return {
+      if(emotionFbDone && emotionEndingDone) return {
         me: mateCallName() + ', 오늘 고마웠어요.',
         mate: ['저야말로요! 이렇게 마음을 나누니 집이 더 편안해졌어요.', '앞으로도 틈으로 서로 이야기하며 지내요.'], mood:'happy' };
       if(emotionEndingDone) return {
@@ -2739,17 +2572,17 @@
         mate: ['좋아요, 저도 신경 쓸게요.', '그러고 보니 같이 산 지 벌써 한 달이네요.\n서로 하고 싶었던 얘기가 있으면 편하게 해 줘요.'], mood:'happy' };
       if(emotionChatDone) return {
         me: mateCallName() + ', 전기세 안건 올려 뒀어요!',
-        mate: ['고마워요. 제 생각도 안건에 댓글로 남겨둘게요.'], mood:'happy' };
+        mate: ['고마워요. 제 생각도 안건에 댓글로 남겨둘게요.', '저는 빨래 개던 중이었어요.'], mood:'happy' };
       return {
         me: mateCallName() + ', 뭐 하고 계세요?',
-        mate: ['어서 와요. 고지서 보다가 잠깐 앉아 있었어요.', '이번 달 전기세가 생각보다 많이 나와서 걱정이에요…\n채팅으로 얘기 좀 남겨 뒀어요.'], mood:'worry' };
+        mate: ['전기세 고지서를 보고 있었어요.', '이번 달 전기세가 생각보다 많이 나와서 걱정이에요…\n채팅으로 얘기 좀 남겨 뒀어요.'], mood:'worry' };
     }
     if(!eunminMission1Done && !eunminMission2Done) return {
       me: mateCallName() + ', 뭐 하고 계세요?',
-      mate: ['마침 설거지하려던 참이었어요.', '그런데 매번 누가 할지 애매하더라고요.\n서로 편하게 규칙을 정해 두면 좋을 것 같아요.'], mood:'worry' };
+      mate: ['마침 설거지하려던 참이었어요.', '그런데 매번 누가 할지 애매하더라고요.\n규칙을 정해 두면 좋을 것 같아요.'], mood:'worry' };
     if(eunminMission1Done && !eunminMission2Done) return {
       me: '집안일 규칙 정해서 등록해뒀어요!',
-      mate: [['happy', '규칙 봤어요! 저도 오늘부터 바로 지킬게요.'], ['worry', '그러고 보니 이번 달 생활비 고지서가 와 있더라고요.\n얼마 나왔는지 저도 궁금했어요.']] };
+      mate: [['happy', '규칙 봤어요! 저도 오늘부터 바로 지킬게요.'], ['happy', '저는 베란다 정리하던 중이었어요.']] };
     if(eunminMission2Done && !eunminMission1Done) return {
       me: '생활비 정산 요청 보냈어요!',
       mate: [['happy', '정산 요청 확인했어요. 제 몫은 바로 보낼게요!'], ['worry', '부엌 설거지는 오늘은 제가 할게요.\n앞으로 누가 언제 할지도 정해 두면 좋겠어요.']] };
@@ -2789,7 +2622,6 @@
 
   // "처음부터 다시"로 전체 시나리오가 리셋되면 서은민 부엌/거실 상태도 함께 되돌린다.
   window.addEventListener('kitchen:mission-reset', function(){
-    kitchenLivingroomGotoBtn.classList.remove('show');
     eunminMission1Done = false;
     eunminMission2Done = false;
     eunminEndingDone = false;
@@ -2827,6 +2659,7 @@
     e.stopPropagation();
     if(laundryChecked) return;
     moveTo(state.utility.laundryPoint.left, state.utility.laundryPoint.top, function(){
+      faceLaundry();
       laundryChecked = true;
       kitchenLaundryIcon.style.display = 'none';
       // 냉장고 미션 때와 마찬가지로, 이 대화창은 메이트가 아니라 관람객 아바타(사용자 이름)의 혼잣말이다.
@@ -2834,7 +2667,7 @@
       showKitchenDialogue(visitorDisplayName, [
         '요즘 계속 밤늦게 들어오다 보니 빨래가 이만큼 쌓였네…',
         '밤에 세탁기를 돌리면 시끄러울까 봐 돌리기도 힘들고, 집안일할 시간도 없어.',
-        mateCallName() + '한테 세탁 구독권 같이 하자고 해볼까?'
+        '세탁 구독권을 신청하고 비용은 ' + mateCallName() + '이랑 나눠 볼까?'
       ], function(){
         // 세탁물을 확인했다는 신호를 메인 앱(틈 앱) 쪽에 전달해서
         // [생활빨래 정기권] 안내 투어를 시작시킨다.
@@ -2842,6 +2675,12 @@
       }, 'sad');
     });
   });
+
+  // 도착 지점이 어디든 빨래 더미(바구니) 쪽을 본다 - 그림 가운데보다 조금 아래(바구니 몸통, 캔버스 768x808)
+  function faceLaundry(){
+    var l = state.utility.laundry;
+    updatePlayerFacing((l.left + l.width / 2 - playerPos.x) * SCENE_ASPECT, l.top + l.width * SCENE_ASPECT * 808 / 768 * 0.6 - playerPos.y);
+  }
 
   // 메인 앱(폰 화면) 쪽에서 [생활빨래 단체권] 공동 구독 신청이 완료되면(kitchen:laundry-resolved)
   // 지저분한 빨래더미 대신 빨래 바구니 + 개킨 옷더미로 바꾼다 (냉장고가 다시 채워지는 것과 같은 연출).
@@ -2858,13 +2697,10 @@
     kitchenScene.classList.remove('kitchen-laundry-resolved');
     eunjiEndingActive = false;
     eunjiEndingDone = false;
-    kitchenEunjiIcon.hidden = false;
-    kitchenEunjiIcon.style.display = '';
   });
 
-  // 세탁물 미션을 마친 뒤 다용도실에서 빨래감(바구니·개킨 옷)이나 세탁기를 누르면, 냉장고처럼 다가가서 혼잣말을 한다.
-  // 세탁기는 배경 그림에 같이 그려져 있어 따로 된 그림이 없으므로 배경 안 세탁기 영역(가로 34~56%, 세로 31~62%)으로 판단
-  var WASHER_AREA = { x1:34, x2:56, y1:31, y2:62 };
+  // 세탁물 미션을 마친 뒤 빨래감(바구니·개킨 옷)을 누르면, 냉장고처럼 다가가서 혼잣말을 한다.
+  // 한방판: 금전형 방이 부엌 그림(세탁기 없음)이라 세탁 맡긴 이야기도 빨래감을 누르면 같이 한다
   function laundryRevisitTarget(e){
     if(!laundryResolved || currentRoom !== 'utility' || kitchenDialogue.classList.contains('show')) return null;
     var hit = function(img){
@@ -2872,25 +2708,16 @@
       return m && r.width && e.clientX >= r.left && e.clientX < r.right && e.clientY >= r.top && e.clientY < r.bottom &&
         maskAt(m, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
     };
-    if(hit(kitchenLaundryBasketImg) || hit(kitchenLaundryClothesImg)) return 'clothes';
-    var sr = kitchenScene.getBoundingClientRect(), x = (e.clientX - sr.left) / sr.width * 100, y = (e.clientY - sr.top) / sr.height * 100;
-    if(x >= WASHER_AREA.x1 && x <= WASHER_AREA.x2 && y >= WASHER_AREA.y1 && y <= WASHER_AREA.y2) return 'washer';
-    return null;
+    return hit(kitchenLaundryBasketImg) || hit(kitchenLaundryClothesImg) ? 'clothes' : null;
   }
   kitchenScene.addEventListener('click', function(e){ // 장면 클릭(그 자리로 걷기)보다 먼저 받는다
-    var t = laundryRevisitTarget(e);
-    if(!t) return;
+    if(!laundryRevisitTarget(e)) return;
     e.stopPropagation();
     var me = (document.getElementById('cohabitVisitorName').textContent || '나').trim() || '나';
-    var p = state.utility.laundryPoint; // 빨래감·세탁기 둘 다 바로 앞인 자리
-    moveTo(p.left, t === 'washer' ? p.top - 4 : p.top, function(){
-      if(t === 'washer'){
-        updatePlayerFacing(0, -1);
-        showKitchenDialogue(me, ['세탁을 맡기니까 빨래 돌릴 걱정이 줄었네. 부담이 훨씬 덜해졌어!'], null, 'happy');
-      } else {
-        updatePlayerFacing(-1, 0);
-        showKitchenDialogue(me, ['빨래가 이렇게 깨끗해졌네! 개어 놓으니까 보기만 해도 기분 좋다.'], null, 'happy');
-      }
+    var p = state.utility.laundryPoint; // 빨래감 바로 앞 자리
+    moveTo(p.left, p.top, function(){
+      faceLaundry();
+      showKitchenDialogue(me, ['세탁을 맡기니 빨래 걱정이 없네.'], null, 'happy');
     });
   }, true);
   kitchenScene.addEventListener('mousemove', function(e){
@@ -2899,11 +2726,7 @@
 
 
   /* =========================================================
-     4-3. 강은지(S) 엔딩 — 거실에서의 샤워 시간 갈등
-     세탁물 미션(미션2)까지 끝낸 뒤 거실로 넘어오면, 기분이 안 좋은 강은지에게 말을 걸 수
-     있다(.kitchen-eunji-icon). 샤워 시간 때문에 생긴 사소한 갈등을 선택지 대화로 풀어가고,
-     어떤 선택을 하든 마지막엔 훈훈하게 마무리된 뒤 게임 종료 연출로 이어간다.
-     메이트 사진 에셋이 없어서 대화 초상화는 이모지(🐿️)로 대신한다.
+     4-3. 금전형 마지막 미션 상태 (안건 댓글 확인 → 하루 마무리, finishEunjiEnding)
      ========================================================= */
   var eunjiEndingActive = false;
   var eunjiEndingDone = false;
@@ -2937,10 +2760,11 @@
       // 냉장고·빨래는 순서 상관없이: 앱 중이면 지금 하는 쪽, 아니면 지금 방에서 할 수 있는 쪽 → 남은 쪽이 있는 방
       if(inApp && fridgeChecked && !fridgeResolved) return '앱에서 반찬가게를 찾아보자!';
       if(inApp && laundryChecked && !laundryResolved) return '앱에서 세탁소를 찾아보자!';
-      if(room === 'kitchen' && !fridgeResolved) return '냉장고를 확인해보자!';
-      if(room === 'utility' && !laundryResolved) return '빨래 더미를 확인해보자!';
-      if(!fridgeResolved) return '부엌으로 가보자!';
-      if(!laundryResolved) return '다용도실에 가보자!';
+      if(!fridgeResolved && !laundryResolved) return '냉장고나 빨래 더미를 확인해보자!';
+      if(inRoom('kitchen') && !fridgeResolved) return '냉장고를 확인해보자!';
+      if(inRoom('utility') && !laundryResolved) return '빨래 더미를 확인해보자!';
+      if(!fridgeResolved) return '냉장고를 확인해보자!'; // 한방판: 방이 하나라 '…로 가보자'는 안 씀
+      if(!laundryResolved) return '빨래 더미를 확인해보자!';
       if(!eunjiEndingDone) return agendaHint(inApp);
       return '오늘의 미션을 모두 마쳤어요!';
     }
@@ -2949,17 +2773,18 @@
       // 정산 앱 중에 '집안일 규칙을 정해보자!'가 떴다)
       if(inApp && agendaPhase === 2) return agendaHint(inApp);
       if(inApp) return (eunminPaperChecked && !eunminMission2Done) ? '앱에서 생활비를 정산해보자!' : '앱에서 집안일 규칙을 정해보자!';
-      if(!eunminMission1Done && room === 'eunminkitchen') return '싱크대와 쓰레기통을 확인해보자!';
-      if(!eunminMission2Done && room === 'livingroom') return '책상 위 고지서를 확인해보자!';
-      if(!eunminMission1Done) return '부엌으로 가보자!';
-      if(!eunminMission2Done) return '거실로 가보자!';
+      if(!eunminMission1Done && !eunminMission2Done) return '싱크대·쓰레기통이나 식탁 위 고지서를 확인해보자!';
+      if(!eunminMission1Done && inRoom('eunminkitchen')) return '싱크대와 쓰레기통을 확인해보자!';
+      if(!eunminMission2Done && inRoom('livingroom')) return '식탁 위 고지서를 확인해보자!';
+      if(!eunminMission1Done) return '싱크대와 쓰레기통을 확인해보자!';
+      if(!eunminMission2Done) return '식탁 위 고지서를 확인해보자!';
       if(!eunminEndingDone) return agendaHint(inApp);
       return '오늘의 미션을 모두 마쳤어요!';
     }
     if(activeMateType === 'H'){
       if(inApp && agendaPhase === 2) return agendaHint(inApp);
       if(inApp) return emotionFbBusy ? '앱에서 피드백을 주고받아보자!' : '앱에서 메이트와 채팅해보자!';
-      if(!emotionChatDone) return '켜져 있는 TV를 확인해보자!';
+      if(!emotionChatDone) return emotionFbDone ? '켜져 있는 TV를 확인해보자!' : '켜져 있는 TV나 책상 위를 확인해보자!';
       if(!emotionEndingDone) return agendaHint(inApp);
       if(!emotionFbDone) return '책상 위를 확인해보자!';
       return '오늘의 미션을 모두 마쳤어요!';
@@ -2979,12 +2804,15 @@
     var key = items ? activeMateType + items.map(function(i){ return (i.done ? 1 : 0) + (i.hidden ? 'h' : ''); }).join('') : '';
     if(key === missionCardKey) return;
     missionCardKey = key;
+    // 세 미션을 다 끝내면 더 말을 걸 수 없으니 메이트 머리 위 '…' 버튼을 숨긴다 (game.html .all-missions-done)
+    kitchenScene.classList.toggle('all-missions-done', !!items && items.every(function(i){ return i.done; }));
     // v.8 금전형과 같은 모션: 접힌 카드가 나타난 뒤(.show) 0.3초 뒤 펼친다(.open)
     missionCard.classList.toggle('show', !!items);
     clearTimeout(missionCardOpenTimer);
     if(!items){ missionCard.classList.remove('open'); return; }
     if(!missionCard.classList.contains('open')) missionCardOpenTimer = setTimeout(function(){ missionCard.classList.add('open'); }, 300);
-    document.getElementById('missionCardList').innerHTML = items.filter(function(i){return !i.hidden;}).map(function(i){
+    // 끝낸 미션은 위로, 남은 미션은 아래로 (같은 쪽끼리는 원래 순서 - sort는 안정 정렬)
+    document.getElementById('missionCardList').innerHTML = items.filter(function(i){return !i.hidden;}).sort(function(a, b){ return b.done - a.done; }).map(function(i){
       return '<li' + (i.done ? ' class="done"' : '') + '>' + i.label + '</li>';
     }).join('');
     var done = items.filter(function(i){ return i.done; }).length, rate = Math.round(done / items.length * 100);
@@ -3009,7 +2837,6 @@
   function finishEunjiEnding(){
     eunjiEndingActive = false;
     eunjiEndingDone = true; // 미션 카드가 0.4초 안에 체크·100%로 바뀐다
-    kitchenEunjiIcon.style.display = 'none';
     celebrateBurst();
     dayEndTimers.push(setTimeout(function(){
       var me = (document.getElementById('cohabitVisitorName').textContent || '나').trim() || '나';
@@ -3060,6 +2887,7 @@
     b.addEventListener('click', function(e){ e.stopPropagation(); agendaOpenApp(); });
     return b;
   }
+  var AGENDA_NOTI_DELAY = 300; // 두 미션을 마치고 대화가 끝난 뒤 새 안건 알림까지 (세 유형 공통, 예전 1.2초)
   function agendaBegin(){
     if(agendaPhase || !agendaDue()) return;
     agendaPhase = 1;
@@ -3069,7 +2897,7 @@
       agendaTimers.push(setTimeout(function(){
         agendaNoti.replaceChildren(agendaNotiCard(mate + '님이 내 안건에 댓글을 남겼어요!', comment, true));
         agendaNoti.hidden = false;
-      }, 1200));
+      }, AGENDA_NOTI_DELAY));
       return;
     }
     var vote = activeMateType === 'A'; // 규칙형: 메이트가 새 규칙(외부인 초대) 투표를 올림 (app-tablet.js AGENDA_CONTENT.A)
@@ -3077,10 +2905,10 @@
       agendaNoti.replaceChildren(vote ? agendaNotiCard('새로운 투표가 올라왔어요!', mate + '님이 \'외부인 초대 규칙\' 투표를 올렸어요.')
                                       : agendaNotiCard('새로운 안건이 등록됐어요!', mate + '님이 올린 안건을 눌러서 확인해보세요.'));
       agendaNoti.hidden = false;
-    }, 1200));
+    }, AGENDA_NOTI_DELAY));
     agendaTimers.push(setTimeout(function(){
       agendaNoti.appendChild(agendaNotiCard(mate + '님이 ' + (vote ? '투표' : '안건') + '에 댓글을 남겼어요!', comment, true));
-    }, 2400));
+    }, AGENDA_NOTI_DELAY + 500));
   }
   function agendaClose(){
     agendaTimers.forEach(clearTimeout); agendaTimers = [];
@@ -3102,8 +2930,10 @@
     else { // 감정형: AI가 찾아 준 예전 약속대로 TV·전등을 끈다
       emotionEndingDone = true;
       setEmotionTvDone(true);
+      if(!emotionFbDone) celebrateBurst(); // 다른 미션처럼 끝내면 폭죽 (마지막 미션이면 finishEunminDay가 터뜨린다)
       var me = (document.getElementById('cohabitVisitorName').textContent || '나').trim() || '나';
       showKitchenDialogue(me, ['맞다, 그때 약속했었지! 안 보는 TV랑 전등은 끄고 콘센트도 뽑아 두자.'], function(){
+        if(emotionFbDone){ finishEunminDay(); return; } // 피드백을 먼저 했으면 이게 마지막 미션
         setEmotionFbReady(true); // 세 번째 미션 - 책상 위 피드백 핀 (처음부터 떠 있지만 이제 눌러서 시작)
         showPlayerBubble('전하고 싶은 마음, 피드백으로 써볼까?', HUNGER_BUBBLE_DURATION);
       }, 'happy');
@@ -3115,7 +2945,7 @@
   // 헤더 유형 탭은 기본 상태에서만 누를 수 있다 (app-tablet.js switchMateType이 읽는다) - 대화창·시작 안내·미션 오브젝트로 가는 중·
   // 엔딩 대화부터 평가 창이 뜨기 전까지는 막는다. 끊기면 대화 뒤에 이어질 미션(이야기하기 등)이 사라져 엔딩까지 못 갔다
   window.TEUM_gameBusy = function(){
-    var ending = (eunjiEndingDone || eunminEndingDone || emotionFbDone) && !clearedTypes[activeMateType]; // 감정형 마지막 미션은 피드백
+    var ending = (eunjiEndingDone || eunminEndingDone || (emotionFbDone && emotionEndingDone)) && !clearedTypes[activeMateType]; // 감정형은 피드백·안건 확인 순서가 자유라 둘 다 끝나야
     return kitchenDialogue.classList.contains('show') || !!coachEl || eunjiEndingActive || ending ||
       (eunminTaskBusy && !eunminMission1Done) || emotionTvBusy || emotionFbBusy;
   };
@@ -3129,30 +2959,27 @@
   function eunjiReset(){eunji.epoch++;clearTimeout(eunji.timer);eunji.hold=false;}
   function eunjiAllDone(){return fridgeResolved && laundryResolved;}
   function eunjiInvite(){ agendaBegin(); } // 마지막 미션 → 메이트가 올린 새 안건 알림
+  // 미션을 마치면: 내 혼잣말 한마디 → 첫 미션일 때만 메이트가 남은 미션을 한 번 귀띔하고 자기 일 하러 간다
+  // (메이트에게 매번 보고하고 메이트가 매번 대답하던 것은 뺐다 - 이야기는 메이트 '…'를 눌렀을 때만)
   function eunjiComplete(kind){
     if(activeMateType!=='S') return;
     eunji.hold=true;stopWalking();
-    var same=currentRoom===(mateInLiving?'livingroom':'kitchen'),epoch=eunji.epoch;
+    var epoch=eunji.epoch;
     var visitor=(document.getElementById('cohabitVisitorName').textContent||'나').trim();
-    var reply=kind==='fridge'?'같이 신청하니까 더 저렴하네요. 당분간 밥 걱정은 없겠어요!':'쌓인 빨래를 한 번에 해결했네요. 부담도 덜하고요!';
-    var next=eunjiAllDone()?'오늘 할 일을 다 끝냈네요! 아, 올려주신 구독권 안건에 댓글 하나 남겨둘게요.':kind==='fridge'?'다용도실 빨래도 시간 날 때 같이 살펴봐요.':'부엌 냉장고도 한번 살펴봐야겠어요.';
+    var hint=eunjiAllDone()?'':kind==='fridge'?'세탁물도 많이 쌓여 있더라고요.\n그럼 저는 다른 일 하고 있을게요!':'냉장고도 텅 비어 있더라고요.\n그럼 저는 다른 일 하고 있을게요!';
     function finish(){
       if(epoch!==eunji.epoch) return;
       eunji.hold=false;
       if(kind==='fridge') window.dispatchEvent(new CustomEvent('kitchen:mission1-dialogue-done'));
-      if(eunjiAllDone()) eunjiInvite();
-      // 규칙형과 같은 틀: 메이트 반응 뒤 다음 할 일 말풍선 (메이트가 거실로 가며 한마디 하는 동안엔 미룬다)
-      var nb=eunjiAllDone()?'오늘 할 일 끝! 잠깐 쉬어볼까?':kind==='fridge'?'이제 다용도실 빨래도 정리해볼까?':'이제 부엌 냉장고도 채워볼까?';
-      setTimeout(function(){ if(epoch===eunji.epoch && activeMateType==='S') showPlayerBubble(nb, HUNGER_BUBBLE_DURATION); }, (kind==='fridge' && same) ? 2000 : 300);
+      if(eunjiAllDone()) eunjiInvite(); // 세 번째 미션(새 안건 알림) - 규칙형·감정형처럼 말풍선 없이
     }
     clearTimeout(eunji.timer);
     // The drawer takes 450ms to close; read the result after the phone leaves.
     eunji.timer=setTimeout(function(){
       if(epoch!==eunji.epoch || activeMateType!=='S') return;
-      var line=same?(kind==='fridge'?'반찬 구독 신청했어요!':'세탁 서비스 신청했어요!'):'신청 완료! '+mateCallName()+'에게도 알림이 갔을 거야.';
+      var line=kind==='fridge'?'반찬 구독 신청 끝! 이제 냉장고가 든든하겠다.':'세탁 구독 신청 끝! 빨래 걱정은 덜었다.';
       showKitchenDialogue(visitor,[line],function(){
-        if(same) mateSpeak(eunjiDisplayName(),[['happy',reply],[eunjiAllDone()?'happy':'worry',next]],finish); // 남은 일 얘기는 걱정
-        else finish(); // 다른 방이면(빨래 미션 = 다용도실) 오른쪽 메이트 채팅은 띄우지 않는다 - 내 다음 할 일 말풍선만
+        if(hint) mateSpeak(eunjiDisplayName(),[['happy',hint]],finish); else finish();
       },'happy');
     },500);
   }

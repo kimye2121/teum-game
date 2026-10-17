@@ -22,20 +22,20 @@
   };
 
   // 두 번째 미션(다용도실) 전용 오브젝트/충돌 기본값. 부엌(DEFAULTS)과 완전히 분리된
-  // 별도의 좌표계(다용도실 배경 utility room.png 기준 %)를 쓴다.
+  // 별도의 좌표계(금전형 방 배경 kitchen_bg22.png 기준 %)를 쓴다.
   // v6 -> v7: 다용도실 배경을 다시 object-fit 없이(가로로 늘어나는 걸 허용하고 세로는
   // 절대 안 잘리게) 꽉 채우는 방식으로 되돌리면서, % 좌표 기준도 "원본 이미지 기준 %"로 복귀.
   var UTILITY_DEFAULTS = {
-    laundry: { top:43.3, left:22.7, width:19.7 }, // 빨래더미(laundry_not) 위치·크기 - 🧺 튜너로 조절. 완료 후 빈 바구니·개킨 빨래도 이 값을 따라감
-    laundryIcon: { top:42.7, left:32.7, size:100 }, // 세탁물 상태이상 알림 아이콘 (빨래더미 위) (size: 배율 %, 100=원본) - ❗ 튜너로 조절
-    laundryPoint: { top:74, left:46 }, // 세탁물 더미 앞 인터랙션(도착) 지점 - 빨래더미 오른쪽 앞 바닥 - 📍 튜너로 조절
+    laundry: { top:47, left:62, width:16 }, // 빨래더미(laundry_not) 위치·크기 - 🧺 튜너로 조절. 완료 후 빈 바구니·개킨 빨래도 이 값을 따라감
+    laundryIcon: { top:48.2, left:70.3, size:100 }, // 세탁물 상태이상 알림 아이콘 (빨래더미 위) (size: 배율 %, 100=원본) - ❗ 튜너로 조절
+    laundryPoint: { top:71, left:76 }, // 세탁물 더미 앞 인터랙션(도착) 지점 - 빨래더미 오른쪽 앞 바닥 - 📍 튜너로 조절
     laundryBasket: { top:83, left:12, width:15 }, // 세탁 완료 후 나타나는 빨래 바구니 위치·크기 - 🧺✅ 튜너로 조절
-    laundryClothes: { top:50.2, left:15.6, width:17.8 }, // 세탁 완료 후 바구니 옆에 튀어나오는 개킨 빨래(laundry.png) 위치·크기 - 👕 튜너로 조절
-    colliders: {
-      washer:    { label:'세탁기 바닥',         points:[ {x:32.0,y:57.0}, {x:56.0,y:55.0}, {x:59.0,y:63.0}, {x:35.0,y:66.0} ] },
-      utilShelf: { label:'다용도실 선반 바닥',   points:[ {x:78.0,y:62.0}, {x:97.0,y:58.0}, {x:99.0,y:66.0}, {x:80.0,y:70.0} ] },
-      laundry:   { label:'빨래더미 바닥',       points:[ {x:24.0,y:63.0}, {x:40.0,y:61.0}, {x:42.0,y:68.0}, {x:26.0,y:70.0} ] } // 10-03 새 빨래더미 자리(43.3/22.7/19.7)
-    }
+    laundryClothes: { top:52, left:56, width:14 }, // 세탁 완료 후 바구니 옆에 튀어나오는 개킨 빨래(laundry.png) 위치·크기 - 👕 튜너로 조절
+    // 한방판: 금전형 방 = 부엌 그림(kitchen_bg22.png, room-images.js) - 냉장고는 원래 부엌 자리, 빨래 더미는 오븐 옆 바닥
+    fridge: { top:26.7, left:5, width:28.9 },       // 냉장고 위치·크기 (object/fridge/ 그림 전부 같은 캔버스)
+    fridgeIcon: { top:31.6, left:15.1, size:100 },  // 냉장고 핀
+    fridgePoint: { top:81, left:29 },               // 냉장고 열 때 서는 자리 (냉장고 오른쪽 아래)
+    colliders: {} // 세탁기·선반 바닥은 부엌 그림엔 없음. 조리대는 걸을 수 있는 영역에서 이미 빠져 있고, 냉장고·빨래는 그림 모양이 막는다
   };
   // DEFAULTS 안에도 그대로 얹어둬서, 저장된 값이 아예 없거나 손상됐을 때(JSON.parse(JSON.stringify(DEFAULTS))
   // 로 초기 상태를 만드는 경로들)도 utility 항목이 함께 채워지게 한다.
@@ -54,6 +54,10 @@
     binsIcon: { top:55, left:83, size:100 }, // 쓰레기통 상태이상 알림 아이콘 - ❗ 튜너로 조절
     binsPoint: { top:78, left:80 }, // 쓰레기통 앞 인터랙션(도착) 지점 - 📍 튜너로 조절
     bubbleIcon: { top:25, left:65, size:90 }, // 말풍선 상태 버튼(미션과 무관, 상시 노출) - 💬 튜너로 조절
+    // 한방판: 규칙형 생활비 정산도 부엌에서 - 고지서는 식탁 위
+    notice: { top:57, left:49, width:8.9 },          // 생활비 고지서 그림(Payment notice.png) 위치·크기
+    paperIcon: { top:56.8, left:53.5, size:194 },    // 고지서 핀
+    paperPoint: { top:82, left:64 },                 // 고지서 볼 때 서는 자리
     colliders: {
       sink: { label:'싱크대 바닥', points:[ {x:11.65,y:40.0}, {x:59.84,y:36.0}, {x:72.19,y:44.0}, {x:72.19,y:60.0}, {x:57.36,y:69.0}, {x:25.24,y:60.0} ] },
       bins: { label:'쓰레기통 바닥', points:[ {x:72.19,y:62.0}, {x:100.0,y:68.0}, {x:100.0,y:85.0}, {x:87.02,y:81.0}, {x:72.19,y:73.0} ] },

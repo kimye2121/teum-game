@@ -83,16 +83,11 @@ window.teumBalance = function(root){
   //  금전 S    7391      7392      7393
   //  규칙 A    2647      2648      2649
   //  감정 H    9522      9521      9520
-  //  개발용    0001/0002/0003(합류)  0011/0022/0033(들임)  0111/0222/0333(찾음) - 끝자리=유형, 자릿수 개수=합의서
   // 실제 코드는 mate-test(틈 화면/mate-test/index.html)의 CODES와 같이 바꿀 것.
   var CODES = {
     '7391':{ type:'S', agreement:TAKER }, '7392':{ type:'S', agreement:GIVER }, '7393':{ type:'S', agreement:NEWHOME },
     '2647':{ type:'A', agreement:TAKER }, '2648':{ type:'A', agreement:GIVER }, '2649':{ type:'A', agreement:NEWHOME },
-    '9522':{ type:'H', agreement:TAKER }, '9521':{ type:'H', agreement:GIVER }, '9520':{ type:'H', agreement:NEWHOME },
-    // 개발 편의용 코드 (완성 후 지워도 됨)
-    '0001':{ type:'S', agreement:TAKER }, '0011':{ type:'S', agreement:GIVER }, '0111':{ type:'S', agreement:NEWHOME },
-    '0002':{ type:'A', agreement:TAKER }, '0022':{ type:'A', agreement:GIVER }, '0222':{ type:'A', agreement:NEWHOME },
-    '0003':{ type:'H', agreement:TAKER }, '0033':{ type:'H', agreement:GIVER }, '0333':{ type:'H', agreement:NEWHOME }
+    '9522':{ type:'H', agreement:TAKER }, '9521':{ type:'H', agreement:GIVER }, '9520':{ type:'H', agreement:NEWHOME }
   };
   // 금전형(S) 메이트 소개 - 합의서(6번 답)에 맞춰 3줄 안팎으로. 없는 유형은 CHARACTERS의 desc 그대로.
   var MATE_DESC_BY_AGREEMENT = { S:{} };
@@ -156,7 +151,9 @@ window.teumBalance = function(root){
     });
   });
 
-  boxes[0].focus();
+  // 터치 기기(폰·태블릿)는 자동 포커스를 하지 않는다 - 누르지도 않았는데 키보드가 올라와 화면을 덮는다. 칸을 누르면 그때 뜬다
+  var AUTO_FOCUS = !(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+  if(AUTO_FOCUS) boxes[0].focus();
 
   function checkCode(){
     var entered = boxes.map(function(b){ return b.value; }).join('');
@@ -175,7 +172,7 @@ window.teumBalance = function(root){
     AGREEMENT_SRC = CODES[entered].agreement;
     codePanel.classList.add('hide');
     genderNamePanel.classList.add('show');
-    visitorNameInput.focus();
+    if(AUTO_FOCUS) visitorNameInput.focus();
   }
 
   function showError(){
@@ -334,11 +331,14 @@ window.teumBalance = function(root){
     document.getElementById('stageAgreementWrap').style.setProperty('--agree-w', (450 * scale) + 'px');
     document.getElementById('stagePhone').style.zoom = scale; // transform:scale은 합의서 글자가 뿌옇게 보여서 zoom (fitAlleyFrame 참고)
     // 말풍선 높이는 합의서 상자가 아니라 양옆 캐릭터 그림에 맞춘다 - 캐릭터는 화면 가로에 따라 따로 작아지고 내려가서,
-    // 상자 기준이면 좁은 화면에서 말풍선만 머리 위 한참 높이 떴다. 1920x1080에서 보기 좋던 자리(그림 위쪽보다 12px 위)
+    // 상자 기준이면 좁은 화면에서 말풍선만 머리 위 한참 높이 떴다.
+    // 말풍선 아래 끝을 머리 꼭대기에서 그림 높이의 2.5%만 걸치게 - 예전엔 위 끝을 고정 px로 둬서 작은 화면일수록 머리를 많이 가렸다
     var pv = document.getElementById('myPreview'), wrap = document.getElementById('stageAgreementWrap');
     if(pv.offsetHeight){
       var charTop = window.innerHeight - pv.offsetHeight * 85 / 140; // .gender-preview: 높이 140u, bottom -55u
-      wrap.style.setProperty('--talk-top', (charTop - 12 - wrap.getBoundingClientRect().top) + 'px');
+      var r = wrap.getBoundingClientRect();
+      var bubbleBottom = Math.max(charTop + pv.offsetHeight * 0.025, r.top + 100); // 말풍선이 화면 위로 잘려 나가지 않게
+      wrap.style.setProperty('--talk-bottom', (r.bottom - bubbleBottom) + 'px');
     }
   }
   window.addEventListener('resize', function(){ if(revealPanel.classList.contains('agreeing')) fitStageAgreement(); });
@@ -1382,7 +1382,7 @@ window.teumBalance = function(root){
         roomStage.style.transform = 'translate(' + ((from.left + from.width / 2) - (to.left + to.width / 2)) + 'px,' +
           ((from.top + from.height / 2) - (to.top + to.height / 2)) + 'px) scale(' + (from.width / to.width) + ')';
         roomStage.getBoundingClientRect(); // 시작 모습을 확정한 뒤에 움직인다
-        roomStage.style.transition = 'transform .45s cubic-bezier(.22,.9,.35,1)';
+        roomStage.style.transition = 'transform .55s cubic-bezier(.33,0,.2,1)'; // 폰 서랍(game.html --drawer-ease)과 같은 곡선·시간
         roomStage.style.transform = '';
       }
     }
@@ -1777,8 +1777,20 @@ window.teumBalance = function(root){
       { kind:'action', action:'open-chats' },
       { kind:'click', target:'chatMate',
         text:'<b>[채팅]</b>에 ' + m + '님이 보낸\n메시지가 와 있어요.' },
-      { kind:'show', target:'chatMsgs',
-        text:'<b>전기값</b> 얘기가 와 있어요.\n어려운 얘기도 채팅으로\n편하게 나눠요.' },
+      { kind:'show', target:'chatMsgs', action:'chat-in',
+        text:m + '님이 <b>채팅</b>을 보냈어요.\n어려운 얘기도 채팅으로\n편하게 나눠요.' },
+      { kind:'show', target:'chatField', action:'chat-type',
+        text:'<b>답장</b>을 적었어요.\n고쳐서 보내도 돼요.' },
+      { kind:'click', target:'chatSend',
+        text:'<b>[보내기]</b>를 눌러\n' + m + '님에게 답해보세요.' },
+      { kind:'show', target:'chatMsgs', action:'chat-in',
+        text:m + '님이 <b>전기값</b> 얘기를\n꺼냈어요.' },
+      { kind:'show', target:'chatField', action:'chat-type',
+        text:'궁금한 걸 물어봐요.\n고쳐서 보내도 돼요.' },
+      { kind:'click', target:'chatSend',
+        text:'<b>[보내기]</b>를 눌러보세요.' },
+      { kind:'show', target:'chatMsgs', action:'chat-in',
+        text:'같이 정할 일이 생겼네요.\n대화로 끝내지 말고\n<b>안건</b>으로 남겨봐요.' },
       { kind:'click', target:'chatPlus',
         text:'정할 일은 <b>안건</b>으로 올려요.\n<b>[+]</b> 버튼을 눌러보세요.' },
       { kind:'click', target:'chatAgenda',
@@ -2049,7 +2061,7 @@ window.teumBalance = function(root){
     resetBillData();
     appShowScreen('home');
     agreementSigned = false;
-    boxes[0].focus();
+    if(AUTO_FOCUS) boxes[0].focus();
   }
 
   // 게임 화면 헤더의 유형 탭(금전/규칙/감정): 이름·성별·합의서 상태는 그대로 두고 해당 유형으로 옮긴다.
@@ -2130,25 +2142,4 @@ window.teumBalance = function(root){
   // 게임 화면 안 그림·글자를 실수로 끌어도 브라우저 기본 끌어 놓기(복사 화면)가 뜨지 않게 (튜너 드래그는 마우스 이벤트라 영향 없음)
   cohabitView.addEventListener('dragstart', function(e){ e.preventDefault(); });
 
-  // [개발용 - 완성 후 이 블록 통째로 삭제] 코드 확인 뒤 Ctrl+Shift+S: 성별/이름·매칭·합의서를 건너뛰고 바로 게임.
-  // (F키는 크롬·노트북이 가로챈다. e.code라 한글 입력 상태에서도 된다)
-  // 이름을 안 썼으면 '테스트', 성별을 안 골랐으면 여성으로 들어간다.
-  document.addEventListener('keydown', function(e){
-    if(!(e.ctrlKey && e.shiftKey && e.code === 'KeyS') || !pendingMateType || cohabitView.classList.contains('show') || stageWrap.classList.contains('fading-out')) return;
-    e.preventDefault();
-    if(!visitorNameInput.value.trim()) visitorNameInput.value = '테스트';
-    if(!selectedGender) selectedGender = 'female';
-    revealCharacter(pendingMateType);
-    // 이하 합의 완료(agreement-signed) 때와 같은 진입: 화면 0.7초 페이드아웃 → 게임 페이드인
-    say(null);
-    stageWrap.classList.add('fading-out');
-    setTimeout(function(){
-      enterCohabit(false);
-      cohabitView.classList.add('fade-in');
-      stageWrap.classList.remove('fading-out');
-      revealPanel.classList.remove('agreeing', 'agree-prep');
-      stageAgreementFrame.src = 'about:blank';
-      showMainAfterAgreement();
-    }, 700);
-  });
 })();

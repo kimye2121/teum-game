@@ -15,6 +15,9 @@
     font-display: swap;
   }
   :root { --ai-from: #71D369; --ai-to: #FF9696; }  /* AI 칩 테두리 그라데이션 (위→아래) */
+  /* 게임 화면 폰 안(iframe)은 해상도에 따라 축소 반올림으로 412x892보다 1px 작아질 때가 있다 → 페이지가 넘쳐 가로·세로 스크롤바가 생기며
+     화면이 작아 보였다(합의서와 같은 문제). 페이지 자체는 스크롤하지 않는다 (앱 안 스크롤 영역은 그대로) */
+  html, body { overflow: hidden; }
   body {
     margin: 0; padding: 0;
     display: flex; justify-content: center; align-items: center;

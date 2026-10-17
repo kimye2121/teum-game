@@ -14,6 +14,9 @@
     font-weight: 700;
     font-display: swap;
   }
+  /* 게임 화면 폰 안(iframe)은 해상도에 따라 축소 반올림으로 412x892보다 1px 작아질 때가 있다 → 페이지가 넘쳐 가로·세로 스크롤바가 생기며
+     화면이 작아 보였다. 페이지 자체는 스크롤하지 않는다 (합의서 내용 스크롤은 안쪽 영역에서 따로 된다) */
+  html, body { overflow: hidden; }
   body {
     margin: 0; padding: 0;
     display: flex; justify-content: center; align-items: center;
@@ -71,7 +74,7 @@
          outline: 1px #BABFCF solid; outline-offset: -1px; border: 0;
          color: black; font: 400 15px 'Pretendard', sans-serif; transition: outline-color .2s ease; }
   .inp::placeholder { color: #BABFCF; }
-  .inp:focus, .inp:not(:placeholder-shown) { outline-color: #71D369; }
+  .inp:focus, .inp.typing, .inp:not(:placeholder-shown) { outline-color: #71D369; }
   .row .inp { width: 265px; }
 
   .notice-box { min-height: 85px; padding: 16px 20px 13px; border-radius: 12px;
@@ -248,7 +251,7 @@
   .free textarea::placeholder { color: #BABFCF; }
   /* Figma 활성: 내용이 차면 회색 테두리. 쓰는 동안(포커스)만 초록 */
   .free textarea:not(:placeholder-shown) { outline-color: #BABFCF; }   /* 동거 Figma 활성: 내용이 있어도 회색 테두리 그대로 */
-  .free textarea:focus { outline-color: #71D369; }
+  .free textarea:focus, .free textarea.typing { outline-color: #71D369; }
 
   /* ===== 3/3: 합의서 최종 확인 ===== */
   .step3 .content { gap: 53px; }
@@ -1289,11 +1292,12 @@
   const tell = step => { if (window.parent !== window) window.parent.postMessage({ source: 'teum-agreement', type: 'progress', step }, '*'); };
   const until = async cond => { while (!cond()) await sleep(100); };
   const type = async (el, text) => {
-    el.focus();
+    // 진짜 focus()는 폰에서 키보드를 띄운다 - 서명 전까지는 쓰는 모습(초록 테두리)만 보여 준다
+    el.classList.add('typing');
     for (const ch of text) { el.value += ch; el.dispatchEvent(new Event('input', { bubbles: true })); await sleep(ch === '\n' ? 250 : 45); }
-    el.blur();
+    el.classList.remove('typing');
   };
-  const press = async el => { el.click(); await sleep(450); };
+  const press = async el => { el.click(); if (document.activeElement !== document.body) document.activeElement.blur(); await sleep(450); };   // 라벨 클릭으로 잡힌 포커스도 바로 푼다
   // 그 단계의 본문(.body)만 스크롤한다 - scrollIntoView는 바깥 화면(게임 페이지)까지 같이 움직여 스크롤이 두 번 되는 것처럼 보였다
   const show = async (el, where = 'center') => {
     const c = el.closest('.body'), r = el.getBoundingClientRect(), cr = c.getBoundingClientRect();

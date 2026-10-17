@@ -567,8 +567,9 @@
   .ending-card{
     position:relative;
     width:min(460px, 100%);
-    max-height:88vh;
+    max-height:calc(100dvh - 48px); /* 오버레이 위아래 여백(24px씩) 안에 딱 맞게 */
     overflow-y:auto;
+    scrollbar-width:none; /* 혹시 넘쳐도 스크롤바는 안 보이게 (아래 낮은 화면용 축소로 보통은 안 넘친다) */
     border-radius:28px;
     padding:36px 30px 28px;
     display:flex; flex-direction:column; align-items:center;
@@ -683,6 +684,30 @@
   .start-coach .sc-next{ width:100%; padding:14px; border:0; border-radius:999px; background:#71D369; color:#203D24;
                          font-family:inherit; font-size:17px; font-weight:700; cursor:var(--cur-hand); }
   .ending-next:disabled{ opacity:.4; pointer-events:none; } /* 별점을 고르기 전 (gpt-kitchen-game.js) */
+  .ending-card::-webkit-scrollbar{ display:none; }
+  /* 낮은 화면(노트북 배율 125~150% 등): 설문 카드 여백·별·의견 칸을 줄여 스크롤 없이 한 화면에 */
+  @media (max-height:760px){
+    .ending-overlay{ padding:16px; }
+    .ending-card{ max-height:calc(100dvh - 32px); padding:24px 26px 20px; }
+    .ending-icon{ width:56px; height:56px; font-size:26px; margin-bottom:10px; }
+    .ending-title{ margin-bottom:8px; }
+    .ending-star-row{ margin:10px 0 12px; }
+    .ending-star{ font-size:28px; }
+    .ending-feedback-textarea{ min-height:56px; }
+    #endingOtherTypes{ margin-top:14px; }
+    .allclear-member img{ height:90px; }
+  }
+  @media (max-height:600px){
+    .ending-card{ padding:18px 22px 16px; }
+    .ending-icon{ display:none; }
+    .ending-title{ font-size:15.5px; }
+    .ending-desc{ font-size:12.5px; line-height:1.6; }
+    .ending-star-row{ margin:6px 0 8px; }
+    .ending-star{ font-size:24px; }
+    .ending-feedback-textarea{ min-height:44px; padding:8px 12px; }
+    .ending-next, .ending-restart{ padding:12px; }
+    .allclear-member img{ height:70px; }
+  }
   /* 엔딩 '다른 메이트와 플레이하기' 버튼들: 한 줄에 나란히, 전체 폭은 아래 [처음으로 돌아가기]와 같고 높이도 같게 */
   #endingOtherTypes{ gap:10px; margin-top:22px; }
   #endingOtherTypes .ending-next{ flex:1 1 0; min-width:0; padding:15px 8px; font-size:14px; white-space:nowrap; letter-spacing:-.02em; }
@@ -1549,6 +1574,9 @@
     transition:opacity .5s ease; /* 빈 바구니(0.5초)와 같은 시간에 겹쳐 바뀐다 */
   }
 
+  /* 유형 탭으로 돌아와 끝낸 미션을 되살리는 순간엔 완료 연출 없이 (gpt-kitchen-game.js skipRestoreAnim) */
+  .kitchenScene.kitchen-restoring, .kitchenScene.kitchen-restoring *{ transition:none !important; }
+
   /* ---------- 플레이어 캐릭터 (character.png 스프라이트) ---------- */
   .kitchenPlayer{
     position:absolute;
@@ -1597,7 +1625,7 @@
     opacity:0;
     pointer-events:none;
     transition:opacity .3s ease;
-    z-index:20;
+    z-index:25; /* 미션 핀(20)보다 위 - 핀이 말풍선 글자를 가리지 않게 */
   }
   .kitchen-player-bubble::after{
     content:'';
@@ -1656,7 +1684,7 @@
   /* 미션 핀 크기 통일: 냉장고·세탁물·싱크대·쓰레기통·종이·거실 메이트 핀 모두 같은 크기 (--pin-scale 하나로 조절).
      ponytail: 튜너의 아이콘별 '크기' 값은 이제 핀 크기에 안 쓰임 - 위치(top/left)만 아이콘별 */
   .kitchenScene{ --pin-scale:1.8; }
-  .kitchenScene :is(.kitchen-fridge-icon, .kitchen-laundry-icon, .kitchen-sink-icon, .kitchen-bins-icon, .kitchen-paper-icon, .kitchen-eunji-icon){
+  .kitchenScene :is(.kitchen-fridge-icon, .kitchen-laundry-icon, .kitchen-sink-icon, .kitchen-bins-icon, .kitchen-paper-icon){
     width:calc(48px * var(--scale, 1) * var(--pin-scale));
     height:calc(62.5px * var(--scale, 1) * var(--pin-scale)); /* alert_pin.svg 비율 309:402 */
     animation:fridge-blink 1.3s ease-in-out infinite; /* 움직임도 통일 - 예전엔 냉장고 핀만 커졌다 작아졌다 */
@@ -1749,7 +1777,8 @@
   /* '메이트와 이야기하기' 핀이 떠 있을 때(규칙·감정형 eunmin-talk-ready, 금전형은 syncMateVisible의 talkPin)와 대화창이 열려 있는 동안엔
      말풍선 버튼을 숨긴다 - JS 토글이 늦게 따라와 잠깐 같이 보이던 것까지 막는다 */
   .kitchenScene.eunmin-talk-ready .kitchen-bubble-icon,
-  body:has(#kitchenDialogue.show) .kitchen-bubble-icon{ display:none !important; }
+  body:has(#kitchenDialogue.show) .kitchen-bubble-icon,
+  .kitchenScene.all-missions-done .kitchen-bubble-icon{ display:none !important; }
   .kitchen-bubble-icon-img{
     width:100%;
     height:100%;
@@ -1790,24 +1819,9 @@
      메이트 타입에 따라 둘 중 하나만 보이게 한다 - kitchen:set-mate-type에서 kitchenScene에
      붙이는 kitchen-mode-s/kitchen-mode-a 클래스로 구분. 다른 아이콘들과 달리 위치는
      튜너 없이 고정값(top/left)을 쓴다. */
-  .kitchen-eunji-icon{
-    position:absolute;
-    top:40%; left:50%;
-    display:none; /* 기본은 숨김 - 강은지(S) 메이트의 거실 화면일 때만 보인다 */
-    width:calc(48px * var(--scale, 1));
-    height:calc(63px * var(--scale, 1));
-    transform:translate(-50%, -50%);
-    cursor:var(--cur-hand);
-    z-index:20;
-    animation:laundry-icon-blink 1.3s ease-in-out infinite;
-  }
-  .kitchenScene.kitchen-scene-livingroom.kitchen-mode-s .kitchen-eunji-icon{ display:block; }
-  /* 규칙형: 미션 2개를 마치면 '메이트와 이야기하기' 핀이 메이트 머리 위에 (위치는 JS가 메이트를 따라 맞춘다) */
-  .kitchenScene.kitchen-mode-a.eunmin-talk-ready .kitchen-eunji-icon,
-  .kitchenScene.kitchen-mode-h.eunmin-talk-ready .kitchen-eunji-icon{ display:block; } /* 감정형도 같은 '메이트와 이야기하기' 핀 */
   .kitchenScene.kitchen-scene-livingroom.kitchen-mode-s .kitchen-paper-icon{ display:none; }
   /* 감정형(H): 거실만 쓰고 아직 미션이 없다 - 규칙형 정산 핀·돌아가기 버튼 숨김 */
-  .kitchenScene.kitchen-mode-h :is(.kitchen-paper-icon, .kitchen-living-back-btn){ display:none !important; }
+  .kitchenScene.kitchen-mode-h .kitchen-paper-icon{ display:none !important; }
   /* 규칙형 거실: 정산 고지서(Payment notice.png 530x431을 배경 2046x1686의 x932 y963, 폭 182에) - 정산 핀은 그만큼 위로(JS renderPaperIcon) */
   .kitchen-a-notice{ display:none; position:absolute; left:45.55%; top:57.12%; width:8.9%; z-index:3; pointer-events:none; user-select:none; -webkit-user-drag:none; }
   .kitchenScene.kitchen-mode-a.kitchen-scene-livingroom .kitchen-a-notice{ display:block; }
@@ -1840,53 +1854,8 @@
     background:radial-gradient(circle, rgba(255,250,215,.95) 0%, rgba(255,226,140,.7) 9%, rgba(255,205,105,.38) 24%, rgba(255,195,95,.14) 44%, rgba(255,190,90,0) 66%);
     animation:lamp-glow 3.2s ease-in-out infinite; }
   @keyframes lamp-glow{ 0%,100%{ opacity:.85; } 50%{ opacity:1; } }
-  .kitchen-eunji-icon-img{
-    width:100%;
-    height:100%;
-    object-fit:contain;
-    display:block;
-    pointer-events:none;
-    filter:drop-shadow(0 calc(6px * var(--scale,1)) calc(10px * var(--scale,1)) rgba(190,60,30,0.4));
-  }
-  .kitchen-tv-icon:hover img, /* 감정형 TV·피드백 핀도 다른 핀처럼 */
-  .kitchen-eunji-icon:hover .kitchen-eunji-icon-img{ filter:drop-shadow(0 calc(6px * var(--scale,1)) calc(10px * var(--scale,1)) rgba(190,60,30,0.4)) brightness(1.08); }
+  .kitchen-tv-icon:hover img{ /* 감정형 TV·피드백 핀도 다른 핀처럼 */ filter:drop-shadow(0 calc(6px * var(--scale,1)) calc(10px * var(--scale,1)) rgba(190,60,30,0.4)) brightness(1.08); }
 
-  /* ---------- 다용도실 이동 버튼(두 번째 미션) ----------
-     예전에는 바닥 위 🚪 아이콘도 함께 있었지만, 이제는 화면 오른쪽 하단의
-     이 버튼 하나만으로 다용도실로 이동한다 (미션1이 끝나야 나타나고, 방을
-     옮기면 사라진다). */
-  /* 방 이동 버튼 (금전형 부엌 ↔ 다용도실) - 언제든 자유롭게 오갈 수 있게 항상 떠 있고, 머리 위 말풍선처럼
-     흰 반투명 알약 모양으로 눈에 튀지 않게. 누르면 캐릭터가 문 쪽으로 걸어간 뒤 화면이 바뀐다 */
-  .kitchen-utility-goto-btn, .kitchen-kitchen-goto-btn, .kitchen-livingroom-goto-btn, .kitchen-living-back-btn{
-    position:absolute;
-    left:calc(28px * var(--scale, 1));
-    bottom:calc(28px * var(--scale, 1));
-    display:flex;
-    align-items:center; justify-content:center;
-    appearance:none; border:none; cursor:var(--cur-hand);
-    padding:calc(16px * var(--scale,1)) calc(30px * var(--scale,1));
-    border-radius:999px;
-    background:rgba(255,255,255,0.85);
-    color:#000;
-    font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-    font-weight:600;
-    font-size:calc(34px * var(--scale, 1));
-    box-shadow:0 calc(6px * var(--scale,1)) calc(14px * var(--scale,1)) rgba(20,30,25,0.15);
-    z-index:20;
-    transition:transform .15s ease, background .15s ease;
-  }
-  .kitchen-utility-goto-btn:hover, .kitchen-kitchen-goto-btn:hover, .kitchen-livingroom-goto-btn:hover, .kitchen-living-back-btn:hover{ background:#fff; }
-  .kitchen-utility-goto-btn:active, .kitchen-kitchen-goto-btn:active, .kitchen-livingroom-goto-btn:active, .kitchen-living-back-btn:active{ transform:translateY(2px) scale(.98); }
-  /* 다음 방(→)은 오른쪽 아래, 이전 방(←)은 왼쪽 아래: 금전형 부엌 ↔ 다용도실 ↔ 거실 / 규칙형 부엌 ↔ 거실 */
-  .kitchen-utility-goto-btn, .kitchen-livingroom-goto-btn{ left:auto; right:calc(28px * var(--scale, 1)); }
-  .kitchen-kitchen-goto-btn, .kitchen-livingroom-goto-btn, .kitchen-living-back-btn{ display:none; }
-  /* 대화창이 떠 있는 동안엔 방 이동 버튼을 숨긴다 (대화창 오른쪽 아래에 겹쳐 보였다) */
-  .kitchenScene:has(.kitchen-dialogue.show) :is(.kitchen-utility-goto-btn, .kitchen-kitchen-goto-btn, .kitchen-livingroom-goto-btn, .kitchen-living-back-btn){ visibility:hidden; }
-  .kitchen-livingroom-goto-btn.show{ display:flex; }
-  .kitchenScene.kitchen-scene-utility .kitchen-kitchen-goto-btn,
-  .kitchenScene.kitchen-scene-livingroom .kitchen-living-back-btn{ display:flex; }
-  /* 거실에 미리 가도 엔딩(메이트 말 걸기)은 세탁물 미션을 마친 뒤에만 */
-  .kitchenScene.kitchen-scene-livingroom.kitchen-mode-s:not(.laundry-done) .kitchen-eunji-icon{ display:none; }
   /* 다용도실에 미리 가도 세탁물 미션은 냉장고 미션(반찬 구독)을 마친 뒤에만 시작된다 */
   .kitchenScene.kitchen-scene-utility:not(.fridge-done) .kitchen-laundry-icon{ display:none; }
 
@@ -1897,17 +1866,14 @@
     opacity:0;
     pointer-events:none;
     transition:opacity .35s ease;
-    z-index:60;
+    z-index:76; /* 대화창(75) 위 - 방 전환 땐 대화창까지 덮는다 */
   }
   .kitchen-room-fade.show{ opacity:1; }
 
   /* 다용도실 화면에서는 부엌 전용 오브젝트(냉장고/테이블/알림 아이콘)를 전부 숨긴다 -
      배경만 다용도실로 바뀌고 부엌 가구가 겹쳐 보이면 안 되므로.
      */
-  .kitchenScene.kitchen-scene-utility .kitchen-layer-fridge,
-  .kitchenScene.kitchen-scene-utility .kitchen-layer-table,
-  .kitchenScene.kitchen-scene-utility .kitchen-fridge-icon,
-  .kitchenScene.kitchen-scene-utility .kitchen-utility-goto-btn{
+  .kitchenScene.kitchen-scene-utility .kitchen-layer-table{ /* 한방판: 냉장고·냉장고 핀은 다용도실에도 둔다 */
     display:none !important;
   }
 
@@ -1919,11 +1885,9 @@
   .kitchenScene.kitchen-scene-eunmin .kitchen-layer-fridge,
   .kitchenScene.kitchen-scene-eunmin .kitchen-layer-table,
   .kitchenScene.kitchen-scene-eunmin .kitchen-fridge-icon,
-  .kitchenScene.kitchen-scene-eunmin .kitchen-utility-goto-btn,
   .kitchenScene.kitchen-scene-livingroom .kitchen-layer-fridge,
   .kitchenScene.kitchen-scene-livingroom .kitchen-layer-table,
   .kitchenScene.kitchen-scene-livingroom .kitchen-fridge-icon,
-  .kitchenScene.kitchen-scene-livingroom .kitchen-utility-goto-btn,
   .kitchenScene.kitchen-scene-livingroom .kitchen-layer-dining-table{
     display:none !important;
   }
@@ -1935,6 +1899,11 @@
     display:none; /* 기본은 숨김 - 서은민 부엌 화면일 때만 보인다 */
   }
   .kitchenScene.kitchen-scene-eunmin .kitchen-layer-dining-table{ display:block; }
+  /* ===== 한방판: 유형마다 방 하나 (금전형 다용도실 / 규칙형 부엌 / 감정형 거실) ===== */
+  /* 금전형: 냉장고·냉장고 핀도 다용도실에 - 위 다용도실 숨김 규칙에서 뺐다 (위치는 JS가 다용도실 좌표로) */
+  /* 규칙형: 생활비 고지서·핀도 부엌 식탁 위에 (위치는 JS renderANotice/renderPaperIcon). 식탁(z 10) 위에 놓는다 */
+  .kitchenScene.kitchen-mode-a.kitchen-scene-eunmin .kitchen-a-notice{ display:block; z-index:10; /* 식탁과 같은 높이(DOM이 뒤라 식탁 위) - 식탁 앞 캐릭터(11)를 덮지 않게 */ }
+  .kitchenScene.kitchen-mode-a.kitchen-scene-eunmin .kitchen-paper-icon{ display:block; }
   /* 서은민 부엌의 설거지 더미·쓰레기 (깨끗한 부엌 배경 위에 얹는다 - 각 미션을 마치면 JS가 숨김). 가구 뒤에 설 일이 없어 캐릭터보다 아래 */
   .kitchen-layer-eunmin-mess{
     position:absolute;
@@ -1957,7 +1926,7 @@
     left:0; right:0; bottom:0;
     display:none;
     align-items:flex-end;
-    z-index:60;
+    z-index:75; /* 축하 폭죽(70)보다 위 */
     /* 캐릭터 쪽(왼쪽)은 화면 가장자리로부터 24px, 대화상자 쪽(오른쪽)은 아이소메트릭
        화면과의 여백을 20px 더 넓혀서 44px를 두도록 한다. */
     padding:0 calc(44px * var(--scale,1)) calc(40px * var(--scale,1)) calc(24px * var(--scale,1));
@@ -2192,7 +2161,7 @@
     --guide-w:210px;
     --guide-gap:14px;
     --drawer-w:calc(var(--guide-w) + var(--guide-gap) + var(--app-w) * 295 / 260.894 + var(--drawer-gap) * 2);
-    --drawer-ease:cubic-bezier(.22,.9,.35,1);
+    --drawer-ease:cubic-bezier(.33,0,.2,1); /* 처음에 확 튀지 않고 부드럽게 출발·도착 (예전 .22,.9,.35,1은 첫 0.1초에 거의 다 움직여 덜컥였다) */
   }
   body.layout-drawer .cohabit-body{ position:relative; overflow:hidden; }
   /* 서랍이 열리면 룸 영역 오른쪽에 서랍 폭만큼 여백을 줘서, 룸이 남은 공간의 가운데로
@@ -2208,6 +2177,7 @@
      단 앱 서랍이 열렸을 때 남는 폭(화면 폭 - 서랍 폭 - 여백)보다 4%까지만 크게 - 노트북 화면에서 서랍이 열릴 때
      집이 확 작아져 보였다(1366~1600 폭에서 8~11% 축소 → 4% 안팎). 넓은 화면은 서랍이 열려도 자리가 남아 그대로 */
   body.layout-drawer .room-stage{
+    will-change:transform; /* 폰 열고 닫을 때 집 크기 변환 - 레이어를 미리 올려 둬서 애니메이션 시작·끝에 다시 그리며 덜컥이지 않게 */
     width:min(calc(100% - 48px), calc((100dvh - 70px - 40px) * 2046 / 1686), calc((100vw - var(--drawer-w) - 48px) * 1.04));
   }
 
@@ -2305,12 +2275,12 @@
     /* 닫힘: 오른쪽 화면 밖으로 완전히 빼서 폰이 전혀 보이지 않게 한다 */
     transform:translateX(100%);
     visibility:hidden;
-    transition:transform .45s var(--drawer-ease), visibility 0s linear .45s;
+    transition:transform .55s var(--drawer-ease), visibility 0s linear .55s;
   }
   body.layout-drawer.app-drawer-open .cohabit-right{
     transform:translateX(0);
     visibility:visible;
-    transition:transform .45s var(--drawer-ease), visibility 0s;
+    transition:transform .55s var(--drawer-ease), visibility 0s;
   }
 
   /* 폰 프레임 = object/phone_frame.svg (Figma 295x599, 화면 자리 x14.65 y14.79 260.894x568.456 r23.665).
@@ -2401,7 +2371,6 @@ body:has(#codePanel.hide) .brand-art{display:none;}body.cohabit-active .brand-ar
 .kitchen-dialogue-portrait,.kitchen-dialogue-emoji-portrait{filter:none;}
 .kitchen-dialogue-choice-btn{background:#fff;color:var(--ink);border:1px solid #CFDCCF;border-radius:calc(14px * var(--scale,1));box-shadow:none;font-weight:600;}
 .kitchen-dialogue-choice-btn:hover{background:#D4F2D2;border-color:var(--point-dark);}
-.kitchen-utility-goto-btn,.kitchen-kitchen-goto-btn,.kitchen-livingroom-goto-btn,.kitchen-living-back-btn{background:#fff;color:var(--point-deep);border:1px solid #DDE5DC;box-shadow:none;}
 .app-guide-bubble{border-radius:12px;border:1px solid #C6DCC5;box-shadow:0 4px 16px #2030240D;font-family:'Pretendard',sans-serif;padding:20px;}
 .app-guide-bubble::after{border-width:1px;border-color:#C6DCC5;}
 .app-guide-chip{background:#EDF8EB;color:var(--point-deep);font-weight:650;border-radius:5px;padding:5px 8px;}
@@ -2451,7 +2420,7 @@ body .app-mock.app-mock--flush{background:#F7F8FA;}
 
 /* Onboarding title tracking and agreement dialogue placement. */
 #stageWrap .title,.onboarding-title{letter-spacing:0;}
-#stageAgreementWrap .talk-bubble{top:var(--talk-top, calc(4% + 38px));} /* --talk-top: 캐릭터 머리 높이 (JS fitStageAgreement) */
+#stageAgreementWrap .talk-bubble{top:auto;bottom:var(--talk-bottom, 85%);} /* --talk-bottom: 말풍선 아래 끝 = 캐릭터 머리 꼭대기 근처 (JS fitStageAgreement) - 줄 수가 달라도 아래 끝이 머리 위에 맞는다 */
 
 /* Game GNB: flat brand identity, a shared day, and app-style selected navigation. */
 .cohabit-topbar{height:70px;min-height:70px;padding:0 28px;gap:24px;background:#fff;border-bottom:1px solid #E6EBE5;}
@@ -2477,7 +2446,6 @@ body .app-mock.app-mock--flush{background:#F7F8FA;}
 .kitchenScene.kitchen-mode-s.kitchen-scene-utility:not(.kitchen-laundry-resolved) .kitchen-laundry-icon{display:flex;}
 .kitchenScene.game-started.kitchen-mode-s.kitchen-scene-utility:not(.kitchen-laundry-resolved) .kitchen-layer-laundry{pointer-events:auto;cursor:var(--cur-hand);}
 /* The ending is triggered by meeting the roaming mate after both errands. */
-.kitchenScene.kitchen-mode-s .kitchen-eunji-icon{display:none!important;}
 .eunji-roam-bubble{position:absolute;z-index:35;transform:translate(-50%,calc(-100% - 560px * var(--scale,1) - 8px));width:44px;height:30px;border:1px solid #D4E4D1;border-radius:14px;background:#fff;color:#32743C;font-size:24px;line-height:1;cursor:var(--cur-hand);}
 .eunji-roam-bubble[hidden]{display:none;}
 .kitchenMate,.kitchenMate *{pointer-events:none!important;}
@@ -2497,16 +2465,20 @@ body .app-mock.app-mock--flush{background:#F7F8FA;}
     background:linear-gradient(#fff, #fff) padding-box, linear-gradient(#71D369, #FF9696) border-box;
     font-size:calc(13 * var(--mc)); /* 미션 항목(냉장고 채우기)과 같은 크기 */ font-weight:500; line-height:1.35; word-break:keep-all; letter-spacing:-0.02em; }
 .kitchenMate #kitchenMateSprite{pointer-events:auto!important;cursor:var(--cur-hand);}
-.kitchenScene.kitchen-mode-s.fridge-done.laundry-done.kitchen-scene-livingroom .kitchen-eunji-icon{display:block!important;}
 .day-end{position:absolute;inset:0;z-index:65;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:linear-gradient(150deg,#D4F2D2ed,#FFD3D7ed);opacity:0;visibility:hidden;pointer-events:none;transition:opacity 1.2s,visibility 1.2s;}
 .day-end.show{opacity:1;visibility:visible;pointer-events:auto;}.day-end b,.day-end span{transition:opacity .25s;}.day-end.quiet b,.day-end.quiet span{opacity:0;}.day-end b{font:700 clamp(25px,3vw,44px) 'NationalPension','Pretendard',sans-serif;}.day-end span{font:16px 'Pretendard',sans-serif;}
 .kitchenScene .kitchen-dialogue.show .kitchen-dialogue-box{ cursor:var(--cur-hand); } /* 대화창은 눌러서 다음 줄로 넘기므로 손가락 */
 .ending-card{font-family:'Pretendard',sans-serif;
   /* 평가 창을 통째로(글자·별·버튼 같이) 1.3배 - 폭·높이 한도는 그만큼 나눠서 화면을 넘지 않게 */
   zoom:1.3; width:min(460px, calc((100vw - 48px) / 1.3)); max-height:calc(88vh / 1.3);}.ending-overlay.show .ending-card{animation:ending-review-in .4s ease-out both;}
+/* 감사 화면 배경 도형 - 카드 모서리 밖으로 잘리게 걸쳐 놓는다 (카드가 overflow로 자른다) */
+.ending-deco{display:none;position:absolute;width:190px;height:auto;opacity:.45;pointer-events:none;z-index:0;}
+.ending-card.thanks .ending-deco{display:block;}
+.ending-deco.flower{right:-56px;top:-60px;}
+.ending-deco.clover{left:-64px;bottom:-70px;}
+.ending-card > :not(.ending-deco){position:relative;z-index:1;}
+.ending-more{color:var(--point-deep,#3E7A45);font-weight:600;}
 @keyframes ending-review-in{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);}}
-body.walk-editing :is(.kitchen-utility-goto-btn,.kitchen-kitchen-goto-btn,.kitchen-livingroom-goto-btn,.kitchen-living-back-btn){z-index:80;}
-.kitchenScene.kitchen-mode-s.fridge-done.laundry-done.kitchen-scene-livingroom .kitchen-eunji-icon[hidden]{display:none!important;}
 /* 세 번째 미션: 메이트가 올린 새 안건 알림 (게임 화면 오른쪽 위, gpt-kitchen-game.js agendaBegin) */
 .agenda-noti{position:absolute;z-index:72;top:24px;right:28px;width:min(485px,calc(100% - 40px));display:flex;flex-direction:column;gap:12px;font-family:'Pretendard',sans-serif;}
 .agenda-noti[hidden],body.app-drawer-open .agenda-noti{display:none;}
@@ -2537,7 +2509,6 @@ body.walk-editing :is(.kitchen-utility-goto-btn,.kitchen-kitchen-goto-btn,.kitch
 @keyframes agenda-noti-in{from{opacity:0;transform:translateY(-14px) scale(.97);}to{opacity:1;transform:none;}}
 @keyframes agenda-noti-pulse{0%{opacity:.9;transform:scale(1);}70%,100%{opacity:0;transform:scale(1.035,1.08);}}
 /* 예전 '메이트와 이야기하기' 핀은 쓰지 않는다 (세 번째 미션이 새 안건으로 바뀜) */
-#kitchenEunjiIcon{display:none!important;}
 </style>
 </head>
 <body>
@@ -2545,8 +2516,8 @@ body.walk-editing :is(.kitchen-utility-goto-btn,.kitchen-kitchen-goto-btn,.kitch
 <svg class="brand-bg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
 <g clip-path="url(#brandBgClip)">
 <rect width="1920" height="1080" fill="white"/>
-<path d="M1489.8 -224.906C1571.06 -210.097 1646.59 -163.979 1696.53 -90.1487C1725.61 -47.0689 1742.76 0.534616 1748.72 48.804C1752.7 49.0861 1756.7 49.6077 1760.71 50.3824C1764.69 51.1507 1768.57 52.1466 1772.34 53.3515C1795.83 10.8557 1829.41 -26.8682 1872.41 -55.951C1946.24 -105.885 2033.52 -120.646 2114.44 -104.063C2099.63 -22.8039 2053.51 52.7302 1979.68 102.665C1936.84 131.591 1889.48 148.719 1841.47 154.766C1841.2 158.95 1840.66 163.164 1839.85 167.388C1839.1 171.249 1838.14 175.014 1836.99 178.674C1879.28 202.143 1916.86 235.633 1945.82 278.45C1995.82 352.372 2010.5 439.646 1993.91 520.64C1912.55 505.893 1836.96 459.683 1787.02 385.853C1758.18 343.133 1741.07 295.965 1734.98 248.111C1730.96 247.832 1726.9 247.308 1722.84 246.524C1718.66 245.716 1714.59 244.658 1710.65 243.369C1687.18 285.449 1653.8 322.804 1611.14 351.654C1537.39 401.604 1450.19 416.303 1369.26 399.797C1384.06 318.615 1430.16 243.158 1503.99 193.224C1546.82 164.306 1594.16 147.179 1642.16 141.126C1642.44 137.276 1642.96 133.401 1643.71 129.518C1644.52 125.334 1645.57 121.261 1646.86 117.312C1604.5 93.838 1566.85 60.3139 1537.85 17.4374C1487.85 -56.4849 1473.18 -143.835 1489.78 -224.829L1489.8 -224.906Z" fill="#FFD3D7"/>
-<path d="M-215.146 727.406C-137.828 645.796 -9.0715 642.426 72.4482 719.575C150.122 638.471 278.802 635.446 360.077 713.116C441.001 790.452 444.774 918.169 369.271 1000.33C448.845 1078.56 451.335 1206.4 374.351 1287.65C297.033 1369.26 168.276 1372.63 86.7561 1295.48C9.08205 1376.59 -119.598 1379.61 -200.873 1301.94C-281.797 1224.61 -285.57 1096.89 -210.067 1014.73C-289.64 936.499 -292.13 808.664 -215.146 727.406ZM76.895 898.572C16.7191 900.067 -30.8516 950.061 -29.3567 1010.24C-27.8618 1070.41 22.1325 1117.98 82.3083 1116.49C142.484 1114.99 190.055 1065 188.56 1004.82C187.065 944.648 137.071 897.077 76.895 898.572Z" fill="#BBF2B7"/>
+<path id="brandFlower" d="M1489.8 -224.906C1571.06 -210.097 1646.59 -163.979 1696.53 -90.1487C1725.61 -47.0689 1742.76 0.534616 1748.72 48.804C1752.7 49.0861 1756.7 49.6077 1760.71 50.3824C1764.69 51.1507 1768.57 52.1466 1772.34 53.3515C1795.83 10.8557 1829.41 -26.8682 1872.41 -55.951C1946.24 -105.885 2033.52 -120.646 2114.44 -104.063C2099.63 -22.8039 2053.51 52.7302 1979.68 102.665C1936.84 131.591 1889.48 148.719 1841.47 154.766C1841.2 158.95 1840.66 163.164 1839.85 167.388C1839.1 171.249 1838.14 175.014 1836.99 178.674C1879.28 202.143 1916.86 235.633 1945.82 278.45C1995.82 352.372 2010.5 439.646 1993.91 520.64C1912.55 505.893 1836.96 459.683 1787.02 385.853C1758.18 343.133 1741.07 295.965 1734.98 248.111C1730.96 247.832 1726.9 247.308 1722.84 246.524C1718.66 245.716 1714.59 244.658 1710.65 243.369C1687.18 285.449 1653.8 322.804 1611.14 351.654C1537.39 401.604 1450.19 416.303 1369.26 399.797C1384.06 318.615 1430.16 243.158 1503.99 193.224C1546.82 164.306 1594.16 147.179 1642.16 141.126C1642.44 137.276 1642.96 133.401 1643.71 129.518C1644.52 125.334 1645.57 121.261 1646.86 117.312C1604.5 93.838 1566.85 60.3139 1537.85 17.4374C1487.85 -56.4849 1473.18 -143.835 1489.78 -224.829L1489.8 -224.906Z" fill="#FFD3D7"/>
+<path id="brandClover" d="M-215.146 727.406C-137.828 645.796 -9.0715 642.426 72.4482 719.575C150.122 638.471 278.802 635.446 360.077 713.116C441.001 790.452 444.774 918.169 369.271 1000.33C448.845 1078.56 451.335 1206.4 374.351 1287.65C297.033 1369.26 168.276 1372.63 86.7561 1295.48C9.08205 1376.59 -119.598 1379.61 -200.873 1301.94C-281.797 1224.61 -285.57 1096.89 -210.067 1014.73C-289.64 936.499 -292.13 808.664 -215.146 727.406ZM76.895 898.572C16.7191 900.067 -30.8516 950.061 -29.3567 1010.24C-27.8618 1070.41 22.1325 1117.98 82.3083 1116.49C142.484 1114.99 190.055 1065 188.56 1004.82C187.065 944.648 137.071 897.077 76.895 898.572Z" fill="#BBF2B7"/>
 </g>
 <defs><clipPath id="brandBgClip"><rect width="1920" height="1080" fill="white"/></clipPath></defs>
 </svg></div>
@@ -2672,6 +2643,9 @@ body.walk-editing :is(.kitchen-utility-goto-btn,.kitchen-kitchen-goto-btn,.kitch
   <!-- 미션2(마지막 미션)까지 끝난 뒤 보여주는 게임 종료 연출: 에필로그 -> 앱 이용 유도 -> 피드백 설문 -->
   <div class="ending-overlay" id="gameEndingOverlay">
     <div class="ending-card clay">
+      <!-- 감사 화면 배경: 시작(코드 입력) 화면의 분홍 꽃·초록 클로버를 옅게 (.ending-card.thanks일 때만) -->
+      <svg class="ending-deco flower" viewBox="1440 -240 700 780" aria-hidden="true"><use href="#brandFlower"/></svg>
+      <svg class="ending-deco clover" viewBox="-300 630 760 760" aria-hidden="true"><use href="#brandClover"/></svg>
 
       <!-- 엔딩 연출은 평가(피드백) 팝업 하나만 남긴다 - 관계 에필로그/앱 홍보 단계는 제거됨. -->
       <div class="ending-step active" data-ending-step="1">
@@ -2697,9 +2671,9 @@ body.walk-editing :is(.kitchen-utility-goto-btn,.kitchen-kitchen-goto-btn,.kitch
           <textarea class="ending-feedback-textarea" id="endingFeedbackText" placeholder="어떤 점이 도움이 되었는지 자유롭게 남겨주세요 (선택)"></textarea>
         </div>
         <div id="endingThanks" style="display:none;">
-          <div class="ending-icon clay-point">🙏</div>
           <p class="ending-title">소중한 의견 감사합니다!</p>
           <p class="ending-desc">남겨주신 의견은 더 나은 틈 서비스를<br/>만드는 데 큰 도움이 될 거예요.</p>
+          <p class="ending-desc ending-more">같은 아바타로 다른 메이트들도 만나보세요!</p>
         </div>
         <!-- 세 유형을 모두 끝냈을 때: 나와 메이트 셋이 나란히 서서 인사 (gpt-kitchen-game.js showEndingThanks가 채운다) -->
         <div id="endingAllClear" style="display:none;">
@@ -2767,12 +2741,8 @@ body.walk-editing :is(.kitchen-utility-goto-btn,.kitchen-kitchen-goto-btn,.kitch
     </div>
 
     <!-- 두 번째 미션: 반찬 구독(미션1)이 끝나면 화면 오른쪽 하단에 나타나는 다용도실 이동 버튼 -->
-    <button type="button" class="kitchen-utility-goto-btn" id="kitchenUtilityGotoBtn">다용도실 →</button>
-    <button type="button" class="kitchen-kitchen-goto-btn" id="kitchenKitchenGotoBtn">← 부엌</button>
 
     <!-- 서은민(A) 미션1(가사·매너 규칙)이 끝나면 화면 오른쪽 하단에 나타나는 거실 이동 버튼 -->
-    <button type="button" class="kitchen-livingroom-goto-btn" id="kitchenLivingroomGotoBtn">거실 →</button>
-    <button type="button" class="kitchen-living-back-btn" id="kitchenLivingBackBtn">← 다용도실</button>
 
     <!-- 서은민(A) 메이트 - 부엌/거실을 자유롭게 오가며 걷는다(kitchen-game.js 4-1-B). 강은지(S)의
          #kitchenMate(제자리 NPC)와는 별개 요소. 플레이어보다 DOM상 앞에 둬서 같은 z-index일 때는
@@ -2856,11 +2826,6 @@ body.walk-editing :is(.kitchen-utility-goto-btn,.kitchen-kitchen-goto-btn,.kitch
       <img class="kitchen-paper-icon-img" src="object/alert_pin.svg" alt="정산 종이 확인 알림" draggable="false" />
     </div>
 
-    <!-- 강은지(S) 엔딩 전용: 거실에서 강은지에게 말을 걸 수 있는 아이콘 (세탁물 미션까지
-         끝낸 뒤 거실에 들어오면 나타난다). 위치는 튜너 없이 고정값으로 둔다. -->
-    <div class="kitchen-eunji-icon" id="kitchenEunjiIcon">
-      <img class="kitchen-eunji-icon-img" src="object/alert_pin.svg" alt="대화 알림" draggable="false" />
-    </div>
 
     <!-- 냉장고 확인 시 뜨는 대화창 (쯔꾸르 게임 스타일 다이얼로그) - 아이소메트릭 방 안에서만 표시 -->
     <div class="kitchen-dialogue" id="kitchenDialogue">
@@ -3444,10 +3409,12 @@ body.walk-editing :is(.kitchen-utility-goto-btn,.kitchen-kitchen-goto-btn,.kitch
 </div>
 
 <script src="app-tablet.js"></script>
+<script src="url-code.js"></script><!-- 사이트 유형 테스트에서 ?code=로 넘어오면 코드 자동 입력 -->
 <!-- 튜너 좌표·충돌 다각형 저장 파일 (튜너 [📁 좌표 파일로 저장]으로 만든다) - kitchen-game.js보다 먼저 -->
 <script src="tuner-defaults.js"></script>
 <script src="walk-masks.js"></script>
 <script src="tuner-state.js"></script>
+<script src="room-images.js"></script>
 <script src="gpt-kitchen-game.js"></script>
 </body>
 </html>

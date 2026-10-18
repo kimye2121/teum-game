@@ -258,7 +258,20 @@
         var tab = document.querySelector('.mate-tab[data-type="' + t + '"]');
         if(tab) tab.click();
       });
-      box.appendChild(b);
+      // 버튼 위에 그 유형 메이트 그림: 평소엔 인사(hi), 버튼에 마우스를 올리면 기쁨(happy)
+      var n = { S:1, A:2, H:3 }[t], base = 'object/mate' + n + '/mate_' + (visitorGender === 'male' ? 'men' : 'women') + '_' + n + '_';
+      var item = document.createElement('div'), img = new Image();
+      item.className = 'ending-other-item';
+      img.src = base + (b.disabled ? 'happy.png' : 'hi.png'); img.alt = ''; img.draggable = false; // 끝낸 유형은 처음부터 기쁨
+      new Image().src = base + 'happy.png'; // 미리 받아 둬서 처음 호버할 때 깜빡이지 않게
+      // 호버하면 그림 위에 메이트마다 다른 인사 말풍선
+      var say = document.createElement('span');
+      say.className = 'ending-other-say';
+      say.textContent = { S:'만나서 반가워요!\n함께 합리적인 생활을 해봐요!', A:'나 잘 부탁해요!\n저희만의 규칙을 만들어요!', H:'반가워요!\n마음 편히 지내요!' }[t];
+      b.addEventListener('mouseenter', function(){ img.src = base + 'happy.png'; item.classList.add('hover'); });
+      b.addEventListener('mouseleave', function(){ img.src = base + 'hi.png'; item.classList.remove('hover'); });
+      item.appendChild(say); item.appendChild(img); item.appendChild(b);
+      box.appendChild(item);
     });
     box.style.display = box.children.length ? 'flex' : 'none'; // 버튼 2개를 한 줄에 나란히 (CSS #endingOtherTypes)
     // 세 유형을 모두 끝냈으면: 다른 유형 버튼 대신 나와 메이트 셋이 감사 인사

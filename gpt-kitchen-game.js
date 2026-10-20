@@ -412,6 +412,28 @@
     kitchenScene.classList.add('game-started'); // 핀·미션 카드
     agendaBegin(); // 두 미션을 마친 채 돌아왔으면 새 안건 알림부터 다시
   }
+  // [개발용 - 완성 후 이 블록 통째로 삭제] 게임 화면에서 Ctrl+Shift+S: 지금 유형의 미션 1·2를 끝낸 상태로 거실에 두고
+  // 세 번째 '새 안건 확인하기'(메이트 알림)부터 하게 한다. 유형을 오갈 때 진행도를 되살리는 restoreProgress를 그대로 쓴다.
+  // (코드 입력 화면의 같은 단축키는 app-tablet.js - 게임 화면이 떠 있으면 그쪽은 아무것도 안 한다)
+  // 게임에 들어오자마자 시작 안내·환영 인사 도중에 눌러도 된다 - 둘 다 본 걸로 치고 닫는다
+  document.addEventListener('keydown', function(e){
+    if(!(e.ctrlKey && e.shiftKey && e.code === 'KeyS') || !document.getElementById('cohabitView').classList.contains('show') ||
+       !document.getElementById('cohabit-game-container').classList.contains('kitchen-active')) return;
+    e.preventDefault();
+    if(clearedTypes[activeMateType] || document.body.classList.contains('app-drawer-open')) return; // 앱 미션 도중·엔딩 뒤엔 안 함
+    if(kitchenDialogue.classList.contains('show')){
+      if(kitchenDialogueOnDone || kitchenDialogueChoiceMode) return; // 뒤에 이어질 일이 있는 미션 대화는 끊지 않는다 (환영 인사는 이어지는 게 없음)
+      closeKitchenDialogue();
+    }
+    startCoachSeen = true; welcomeSeen[activeMateType] = true;
+    if(coachAbort) coachAbort();
+    var p = { S:{ fridge:true, laundry:true }, A:{ m1:true, m2:true, mateLiving:true }, H:{ tv:true, ag:true } }[activeMateType];
+    if(!p) return;
+    p.room = ONE_ROOM[activeMateType] || 'livingroom'; // 한방판: 그 유형의 방에 그대로
+    // 아직 게임 시작 전(환영 인사가 뜨기 전 0.8초)이면 진행도로 넣어 두고 곧 올 kitchen:game-start가 되살린다
+    if(!kitchenScene.classList.contains('game-started')){ progressByType[activeMateType] = p; return; }
+    restoreProgress(p);
+  });
   function restoreClearedEnding(){
     skipRestoreAnim();
     // 미션을 모두 마친 상태(완료율 100%)로 두고, 끝낼 때 나오는 그라데이션 축하 화면('함께 맞춰 간 첫날')만 보여 준다

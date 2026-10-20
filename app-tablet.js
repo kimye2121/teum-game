@@ -83,11 +83,16 @@ window.teumBalance = function(root){
   //  금전 S    7391      7392      7393
   //  규칙 A    2647      2648      2649
   //  감정 H    9522      9521      9520
+  //  개발용    0001/0002/0003(합류)  0011/0022/0033(들임)  0111/0222/0333(찾음) - 끝자리=유형, 자릿수 개수=합의서
   // 실제 코드는 mate-test(틈 화면/mate-test/index.html)의 CODES와 같이 바꿀 것.
   var CODES = {
     '7391':{ type:'S', agreement:TAKER }, '7392':{ type:'S', agreement:GIVER }, '7393':{ type:'S', agreement:NEWHOME },
     '2647':{ type:'A', agreement:TAKER }, '2648':{ type:'A', agreement:GIVER }, '2649':{ type:'A', agreement:NEWHOME },
-    '9522':{ type:'H', agreement:TAKER }, '9521':{ type:'H', agreement:GIVER }, '9520':{ type:'H', agreement:NEWHOME }
+    '9522':{ type:'H', agreement:TAKER }, '9521':{ type:'H', agreement:GIVER }, '9520':{ type:'H', agreement:NEWHOME },
+    // 개발 편의용 코드 (완성 후 지워도 됨)
+    '0001':{ type:'S', agreement:TAKER }, '0011':{ type:'S', agreement:GIVER }, '0111':{ type:'S', agreement:NEWHOME },
+    '0002':{ type:'A', agreement:TAKER }, '0022':{ type:'A', agreement:GIVER }, '0222':{ type:'A', agreement:NEWHOME },
+    '0003':{ type:'H', agreement:TAKER }, '0033':{ type:'H', agreement:GIVER }, '0333':{ type:'H', agreement:NEWHOME }
   };
   // 금전형(S) 메이트 소개 - 합의서(6번 답)에 맞춰 3줄 안팎으로. 없는 유형은 CHARACTERS의 desc 그대로.
   var MATE_DESC_BY_AGREEMENT = { S:{} };
@@ -2143,4 +2148,25 @@ window.teumBalance = function(root){
   // 게임 화면 안 그림·글자를 실수로 끌어도 브라우저 기본 끌어 놓기(복사 화면)가 뜨지 않게 (튜너 드래그는 마우스 이벤트라 영향 없음)
   cohabitView.addEventListener('dragstart', function(e){ e.preventDefault(); });
 
+  // [개발용 - 완성 후 이 블록 통째로 삭제] 코드 확인 뒤 Ctrl+Shift+S: 성별/이름·매칭·합의서를 건너뛰고 바로 게임.
+  // (F키는 크롬·노트북이 가로챈다. e.code라 한글 입력 상태에서도 된다)
+  // 이름을 안 썼으면 '테스트', 성별을 안 골랐으면 여성으로 들어간다.
+  document.addEventListener('keydown', function(e){
+    if(!(e.ctrlKey && e.shiftKey && e.code === 'KeyS') || !pendingMateType || cohabitView.classList.contains('show') || stageWrap.classList.contains('fading-out')) return;
+    e.preventDefault();
+    if(!visitorNameInput.value.trim()) visitorNameInput.value = '테스트';
+    if(!selectedGender) selectedGender = 'female';
+    revealCharacter(pendingMateType);
+    // 이하 합의 완료(agreement-signed) 때와 같은 진입: 화면 0.7초 페이드아웃 → 게임 페이드인
+    say(null);
+    stageWrap.classList.add('fading-out');
+    setTimeout(function(){
+      enterCohabit(false);
+      cohabitView.classList.add('fade-in');
+      stageWrap.classList.remove('fading-out');
+      revealPanel.classList.remove('agreeing', 'agree-prep');
+      stageAgreementFrame.src = 'about:blank';
+      showMainAfterAgreement();
+    }, 700);
+  });
 })();

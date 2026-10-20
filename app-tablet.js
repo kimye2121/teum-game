@@ -169,6 +169,7 @@ window.teumBalance = function(root){
     // 코드가 맞아도 메이트 프로필은 아직 보여주지 않는다 - 성별/이름 입력을 먼저 받고,
     // 그 다음 화면에서 프로필을 공개한다 (revealCharacter는 그때 호출).
     pendingMateType = matched;
+    window.teumCode = entered; // 설문 기록에 남긴다 (0으로 시작하면 테스트용 코드 - 설문결과.html에서 골라 지울 수 있게)
     AGREEMENT_SRC = CODES[entered].agreement;
     codePanel.classList.add('hide');
     genderNamePanel.classList.add('show');

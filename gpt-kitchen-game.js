@@ -194,6 +194,8 @@
   var endingStarValue = 0; // 질문 두 개 별점을 모두 골라야 제출 가능 (둘 다 고르면 1, 아니면 0)
   var endingStarValues = {}; // 별점 줄 id → 고른 값
   var endingSubmitted = false;
+  // 설문 답을 받을 구글 Apps Script 웹 앱 주소 (설문_구글시트_연결방법.txt 참고). 비워 두면 보내지 않는다.
+  var SURVEY_URL = '';
 
   function showEndingStep(idx){
     currentEndingStep = idx;
@@ -224,8 +226,21 @@
       showEndingStep(currentEndingStep + 1);
       return;
     }
-    // 마지막 단계(피드백 설문)에서 누르면 제출 처리 - 별도 서버 저장 없이,
-    // 화면에서만 감사 인사로 전환하는 UI 목적의 데모 설문이다.
+    // 마지막 단계(피드백 설문)에서 누르면 제출 처리 - 답은 이 PC 브라우저에 쌓고(인터넷 없어도 됨, 설문결과.html에서 보기·내려받기·삭제),
+    // SURVEY_URL이 있으면 구글 스프레드시트로도 보낸다(설문_구글시트_연결방법.txt). 응답을 기다리지 않고 바로 감사 화면으로.
+    var answer = {
+      time: new Date().toISOString(), code: window.teumCode || '',
+      type: { S:'금전형', A:'규칙형', H:'감정형' }[activeMateType] || activeMateType,
+      gender: visitorGender === 'male' ? '남' : '여',
+      q1: endingStarValues.endingStarRow, q2: endingStarValues.endingStarRow2,
+      comment: endingFeedbackText.value.trim()
+    };
+    try { // ponytail: 브라우저 저장소(localStorage) - 크롬 '인터넷 사용 기록 삭제'로 쿠키·사이트 데이터를 지우면 같이 지워진다
+      var saved = JSON.parse(localStorage.getItem('teumSurvey') || '[]');
+      saved.push(answer);
+      localStorage.setItem('teumSurvey', JSON.stringify(saved));
+    } catch(err){}
+    if(SURVEY_URL) fetch(SURVEY_URL, { method:'POST', mode:'no-cors', keepalive:true, body: JSON.stringify(answer) }).catch(function(){});
     if(clearedTypes[activeMateType]) clearedTypes[activeMateType].submitted = true;
     showEndingThanks();
   });
